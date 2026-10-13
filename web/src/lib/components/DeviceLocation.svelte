@@ -49,6 +49,8 @@
 			map = L.map(el, { scrollWheelZoom: false });
 			L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 				maxZoom: 19,
+				// The global policy is same-origin; OSM's tile policy needs a Referer, so send the origin only.
+				referrerPolicy: 'strict-origin-when-cross-origin',
 				attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>'
 			}).addTo(map);
 			const latlngs = pts.map((p): [number, number] => [p.latitude, p.longitude]);

@@ -119,6 +119,7 @@ from Knox, with the last answer kept for when Knox is unreachable. Location is d
 map (Leaflet, tiles from OpenStreetMap) with a coordinates table and an OpenStreetMap link. Admins can
 turn the map off under Admin > Settings > General > **Show map**: the viewer's browser loads tiles
 from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed.
+Tile requests carry the app origin (never the page path) as Referer, as OpenStreetMap's tile policy requires.
 
 ## Vocabulary
 

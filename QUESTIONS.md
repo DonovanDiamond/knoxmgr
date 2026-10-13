@@ -388,6 +388,7 @@ see decision 2026-10-12 in CLAUDE.md. Reads come from the mirror, writes go to K
 replacing the earlier "no embedded map" default.
 - The map shows the history points and a polyline, highlights the latest point and fits the bounds; the coordinates table and OpenStreetMap link stay.
 - Privacy trade-off: the viewer's browser loads tiles from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed. Admins can switch the map off under General settings; the CSP `img-src` allows only that tile host.
+- Tiles are requested with `referrerPolicy: 'strict-origin-when-cross-origin'` so OSM receives the app origin as Referer (its tile policy rejects tiles without one); the global `Referrer-Policy: same-origin` header is unchanged.
 - Visibility is the same as the location data (admin and write users); no new audit event, since `device.location.view` already covers the view and the setting change is audited as `settings.general`.
 
 ## Windows desktop app
