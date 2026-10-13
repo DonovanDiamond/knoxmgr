@@ -1,0 +1,68 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      # The Go package embeds web/build, so the UI must exist before compiling.
+      - run: npm ci && npm run build
+        working-directory: web
+      - name: Build binaries
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${TAG}" -o dist/knoxmgr-linux-amd64 ./cmd/knoxmgr
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${TAG}" -o dist/knoxmgr-windows-amd64.exe ./cmd/knoxmgr
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${TAG}" dist/* --title "${TAG}" --generate-notes --verify-tag
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: knoxmgr
+          platforms: linux/amd64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/donovandiamond/knoxmgr:${{ github.ref_name }}
+            ghcr.io/donovandiamond/knoxmgr:latest
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: knoxmock
+          platforms: linux/amd64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/donovandiamond/knoxmgr-mock:${{ github.ref_name }}
+            ghcr.io/donovandiamond/knoxmgr-mock:latest

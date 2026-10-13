@@ -1,0 +1,11 @@
+**/node_modules
+web/build
+**/.svelte-kit
+.git
+.claude
+design
+bin
+*.db
+*.db-*
+*.pem
+*.key

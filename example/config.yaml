@@ -1,0 +1,4 @@
+# Plain HTTP for local testing: the Secure refresh cookie would never be sent back
+# by the browser without TLS. Leave this out (default true) behind a TLS proxy.
+# Knox and the first admin are set up in the browser; see README.md.
+secureCookies: false

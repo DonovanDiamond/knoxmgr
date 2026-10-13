@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="harbour">
+<!--
+PLAN 01 Enrollment desk (workflow-first)
+1. Palette: harbour blue #17324D (bar, primary), cool paper #F5F8FA (page), signal teal #0E8C7F (enrolled/focus),
+   waiting amber #C98A0B (invited), error red #B3261E (errors/destructive). Dark: #0F2133 page, lifted tints of the same hues.
+2. Type: Public Sans everywhere, tabular-nums on every count and id column. Sentence case. No monospace.
+3. Boldness lives in ONE place: the pipeline strip (Not in Knox yet > Ready to invite > Invited, waiting > Enrolled).
+   Segment widths are proportional to counts; it is also the filter. The same four state colours then reappear,
+   quietly, as dots in tables, the group member bars and the form's "where this person sits" marker.
+4. Everything else is quiet: flat paper, row separators instead of cards, 8px radius on controls only (panels are square).
+5. Layout (app screens):
+   +--------------------------------------------------------+
+   | bar: knoxmgr  Users Groups Admin      [screen] [theme] |
+   +----------+---------------------------------------------+
+   | org tree | [=== not in Knox ==|== ready ==|= inv =|enr]|  <- pipeline strip = filter
+   | (rail)   | search  org(mobile)      Add user  Invite   |
+   |          | dense table, left aligned                   |
+   +----------+---------------------------------------------+
+6. Generic-default check: not a card grid, not a sidebar-of-icons dashboard; the list IS the workflow.
+7. Dialogs (delete, invite result) are square-edged sheets over the list so the strip stays visible behind them.
+8. Responsive: rail becomes an org select under 1024px; strip becomes a 2x2 grid under 640px; secondary columns hide.
+9. A11y: strip segments are real buttons with aria-pressed; focus ring teal 2px; reduced motion removes transitions.
+10. Screens: signin, users, form, delete, invite, groups, group, readonly, admin (+ audit tab).
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knoxmgr - Enrollment desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.43/daisyui.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+<style type="text/tailwindcss">
+@theme { --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif; }
+</style>
+<style>
+[data-theme=harbour]{
+  color-scheme: light;
+  --color-base-100:#F5F8FA; --color-base-200:#E8EEF2; --color-base-300:#D3DCE3; --color-base-content:#17324D;
+  --color-primary:#17324D; --color-primary-content:#F5F8FA;
+  --color-secondary:#0E8C7F; --color-secondary-content:#fff;
+  --color-accent:#C98A0B; --color-accent-content:#1d1400;
+  --color-neutral:#17324D; --color-neutral-content:#F5F8FA;
+  --color-info:#17324D; --color-info-content:#fff;
+  --color-success:#0E8C7F; --color-success-content:#fff;
+  --color-warning:#C98A0B; --color-warning-content:#1d1400;
+  --color-error:#B3261E; --color-error-content:#fff;
+  --radius-selector:4px; --radius-field:8px; --radius-box:0px; --size-selector:.25rem; --size-field:.25rem; --border:1px; --depth:0; --noise:0;
+  --bar:#17324D; --muted:#4F6577; --st-none:#8798A8; --st-ready:#2F6A9B; --st-wait:#C98A0B; --st-done:#0E8C7F; --teal-text:#0A6F65; --amber-text:#8A5C00; --red-text:#B3261E;
+}
+[data-theme=harbour-dark]{
+  color-scheme: dark;
+  --color-base-100:#0F2133; --color-base-200:#162C42; --color-base-300:#27415A; --color-base-content:#E3EBF1;
+  --color-primary:#9CC4E4; --color-primary-content:#0B1A28;
+  --color-secondary:#2BB5A6; --color-secondary-content:#04201D;
+  --color-accent:#E3A92F; --color-accent-content:#1d1400;
+  --color-neutral:#223A52; --color-neutral-content:#E3EBF1;
+  --color-info:#9CC4E4; --color-info-content:#0B1A28;
+  --color-success:#2BB5A6; --color-success-content:#04201D;
+  --color-warning:#E3A92F; --color-warning-content:#1d1400;
+  --color-error:#F2766E; --color-error-content:#2a0705;
+  --radius-selector:4px; --radius-field:8px; --radius-box:0px; --size-selector:.25rem; --size-field:.25rem; --border:1px; --depth:0; --noise:0;
+  --bar:#091723; --muted:#9FB3C4; --st-none:#6F8498; --st-ready:#5C9BD0; --st-wait:#E3A92F; --st-done:#2BB5A6; --teal-text:#46CDBE; --amber-text:#EDBB55; --red-text:#F2766E;
+}
+html{font-family:"Public Sans",system-ui,sans-serif;font-size:14px}
+body{background:var(--color-base-100);color:var(--color-base-content);min-height:100vh}
+.num,td,th,.tnum{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--color-secondary);outline-offset:2px}
+.muted{color:var(--muted)}
+.screen{display:none}
+body[data-screen=signin] #signin,
+body[data-screen=users] #users, body[data-screen=delete] #users, body[data-screen=invite] #users, body[data-screen=readonly] #users,
+body[data-screen=form] #form, body[data-screen=groups] #groups, body[data-screen=group] #group, body[data-screen=admin] #admin{display:block}
+body[data-screen=signin] #appbar{display:none}
+.rail-on #rail{display:block}
+#rail{display:none}
+body:not([data-screen=users]):not([data-screen=delete]):not([data-screen=invite]):not([data-screen=readonly]) #rail{display:none!important}
+body:not([data-screen=users]):not([data-screen=delete]):not([data-screen=invite]):not([data-screen=readonly]) #shell{display:block}
+.orgsel-mobile{display:block}
+@media (min-width:1024px){ .orgsel-mobile{display:none} #rail{display:block} #shell{display:grid;grid-template-columns:260px minmax(0,1fr)} }
+/* pipeline strip */
+.strip{display:flex;gap:3px}
+.seg{flex:var(--w,1) 1 0;min-width:130px;text-align:left;background:none;border:0;padding:0;cursor:pointer;color:inherit;transition:opacity .15s}
+.seg .bar{display:block;height:14px;background:var(--c)}
+.seg:first-child .bar{border-radius:0}
+.seg .lab{display:flex;align-items:baseline;gap:.5rem;padding:.5rem .25rem 0;font-weight:600}
+.seg .cnt{font-size:1.75rem;font-weight:700;line-height:1}
+.seg .hint{display:block;padding:.15rem .25rem 0;font-size:12px;color:var(--muted)}
+.strip.filtering .seg:not([aria-pressed=true]){opacity:.5}
+.seg[aria-pressed=true] .bar{height:14px;outline:2px solid var(--color-base-content);outline-offset:2px}
+.seg:hover{opacity:1!important}
+.seg .step{font-size:12px;font-weight:600;color:var(--muted)}
+@media (max-width:639px){ .strip{display:grid;grid-template-columns:1fr 1fr;row-gap:.75rem} .seg{min-width:0} .seg .cnt{font-size:1.4rem} }
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+/* tables */
+table.dense{width:100%;border-collapse:collapse;text-align:left}
+table.dense th{font-weight:600;font-size:12px;color:var(--muted);padding:.5rem .75rem;border-bottom:2px solid var(--color-base-content);white-space:nowrap;text-align:left}
+table.dense td{padding:.4rem .75rem;border-bottom:1px solid var(--color-base-300);height:38px;vertical-align:middle}
+table.dense tr.sel td{background:var(--color-base-200)}
+table.dense tbody tr:hover td{background:var(--color-base-200)}
+.st-none{--c:var(--st-none)}.st-ready{--c:var(--st-ready)}.st-wait{--c:var(--st-wait)}.st-done{--c:var(--st-done)}
+/* rail */
+.tree button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:.5rem;text-align:left;padding:.35rem .5rem;border:0;background:none;color:inherit;cursor:pointer;border-left:3px solid transparent}
+.tree button:hover{background:var(--color-base-200)}
+.tree button[aria-current=true]{border-left-color:var(--color-secondary);background:var(--color-base-200);font-weight:600}
+.tree ul{margin-left:.9rem;border-left:1px solid var(--color-base-300)}
+.bar-app{background:var(--bar);color:#F5F8FA}
+.bar-app a,.bar-app button.navb{color:#C9D8E4;padding:.5rem .75rem;border-bottom:3px solid transparent;background:none;cursor:pointer}
+.bar-app a[aria-current=page]{color:#fff;border-bottom-color:#2BB5A6;font-weight:600}
+.bar-app select,.bar-app .btn{background:#10263a;color:#E3EBF1;border-color:#35526b}
+.btn-primary{font-weight:600}
+.btn[disabled],.btn.btn-disabled{opacity:.55}
+.field label{display:block;font-weight:600;margin-bottom:.25rem}
+.field .msg{margin-top:.25rem;font-size:13px}
+.field .msg.err{color:var(--red-text)}
+.input-bad{border-color:var(--color-error)!important}
+.sheet{background:var(--color-base-100);border-top:4px solid var(--color-base-content);box-shadow:0 20px 50px rgba(9,23,35,.35)}
+.sheet.danger{border-top-color:var(--color-error)}
+.scrim{position:fixed;inset:0;background:rgba(9,23,35,.55);display:none;align-items:flex-start;justify-content:center;padding:8vh 1rem 1rem;z-index:50;overflow:auto}
+body[data-screen=delete] #m-delete, body[data-screen=invite] #m-invite{display:flex}
+.note{border-left:4px solid var(--c);padding:.5rem .75rem;background:var(--color-base-200)}
+.tab[aria-selected=true]{border-bottom:3px solid var(--color-secondary);font-weight:600}
+.tab{padding:.5rem .9rem;background:none;border:0;border-bottom:3px solid transparent;cursor:pointer;color:inherit}
+details>summary{cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body data-screen="users">
+
+<!-- ============ app bar ============ -->
+<header id="appbar" class="bar-app">
+  <div class="flex flex-wrap items-center gap-x-4 px-4 min-h-12">
+    <span class="font-bold tracking-tight text-base py-2">knoxmgr</span>
+    <nav aria-label="Main" class="flex">
+      <a href="#users" data-nav="users" class="inline-block">Users</a>
+      <a href="#groups" data-nav="groups" class="inline-block">Groups</a>
+      <a href="#admin" data-nav="admin" class="inline-block">Admin</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-2 py-1">
+      <label class="sr-only" for="screenSel">Prototype screen</label>
+      <select id="screenSel" class="select select-sm w-48"></select>
+      <button id="themeBtn" class="btn btn-sm" aria-pressed="false">Dark theme</button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 1 sign in ============ -->
+<main id="signin" class="screen">
+  <div class="min-h-screen grid lg:grid-cols-[minmax(0,1fr)_480px]">
+    <section class="hidden lg:flex flex-col justify-end p-12 text-[#F5F8FA]" style="background:#17324D">
+      <p class="text-3xl font-bold max-w-md leading-tight">From directory entry to enrolled phone, in four steps.</p>
+      <div class="flex gap-[3px] mt-8 max-w-md" aria-hidden="true">
+        <span class="h-3.5 flex-1" style="background:#8798A8"></span><span class="h-3.5 flex-1" style="background:#5C9BD0"></span><span class="h-3.5 flex-1" style="background:#E3A92F"></span><span class="h-3.5 flex-1" style="background:#2BB5A6"></span>
+      </div>
+      <p class="mt-3 text-sm text-[#C9D8E4] max-w-md">Not in Knox yet, ready to invite, invited, enrolled.</p>
+    </section>
+    <section class="flex items-center p-6 sm:p-12">
+      <form class="w-full max-w-sm" onsubmit="return false">
+        <h1 class="text-2xl font-bold mb-1">Sign in</h1>
+        <p class="muted mb-6">Use your directory or local account.</p>
+        <div role="status" class="note mb-5" style="--c:var(--st-wait)">
+          <strong>Directory unavailable.</strong> Local accounts still work.
+        </div>
+        <div class="field mb-4"><label for="su">Username</label><input id="su" class="input w-full" autocomplete="username" value="ops.admin"></div>
+        <div class="field mb-6"><label for="sp">Password</label><input id="sp" type="password" class="input w-full" autocomplete="current-password" value="correct horse"></div>
+        <button class="btn btn-primary w-full" data-go="users">Sign in</button>
+      </form>
+    </section>
+  </div>
+</main>
+
+<div id="shell" class="screen-shell">
+<aside id="rail" class="border-r border-base-300 p-3 min-h-[calc(100vh-48px)]" aria-label="Organizations">
+  <h2 class="font-semibold px-2 pb-2" id="railTitle">Organizations</h2>
+  <div class="tree" id="tree"></div>
+  <p class="muted text-xs px-2 pt-3">Selecting an organization includes its sub-organizations.</p>
+</aside>
+
+<div class="min-w-0">
+
+<!-- ============ 2 users / 8 readonly ============ -->
+<main id="users" class="screen p-4 lg:p-6">
+  <div class="flex flex-wrap items-baseline gap-x-3 mb-4">
+    <h1 class="text-2xl font-bold">Users</h1>
+    <span class="muted" id="scopeLine">Head Office and all sub-organizations</span>
+  </div>
+
+  <div id="roBanner" class="note mb-4 hidden" style="--c:var(--st-ready)" role="status">
+    <strong>Your access to Gauteng is read-only.</strong> You can view users and groups here. Ask an administrator for write access to add users or send invites.
+  </div>
+
+  <div id="strip" class="strip mb-1" role="group" aria-label="Filter by enrollment state"></div>
+  <p class="muted text-xs mb-5 flex justify-between gap-4"><span id="stripNote">Showing everyone. Select a stage to filter.</span><button class="link" id="clearState" hidden>Show all stages</button></p>
+
+  <div class="flex flex-wrap items-end gap-3 mb-3">
+    <div class="field grow sm:grow-0 sm:w-72"><label for="q" class="sr-only">Search users</label><input id="q" type="search" class="input input-sm w-full" placeholder="Search by name, user ID or email"></div>
+    <div class="orgsel-mobile"><label for="orgSel" class="sr-only">Organization</label><select id="orgSel" class="select select-sm"></select></div>
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      <span id="roReason" class="text-sm muted hidden">Your access to Gauteng is read-only</span>
+      <button id="inviteBtn" class="btn btn-sm btn-primary" disabled data-go="invite">Send enrollment invite</button>
+      <button id="addBtn" class="btn btn-sm btn-outline" data-go="form">Add user</button>
+    </div>
+  </div>
+  <p id="selLine" class="text-sm mb-2 muted" aria-live="polite">Select users to send them an enrollment invite.</p>
+
+  <div class="overflow-x-auto">
+  <table class="dense">
+    <thead><tr>
+      <th class="w-8"><input type="checkbox" id="all" class="checkbox checkbox-sm" aria-label="Select all shown users"></th>
+      <th>User ID</th><th>Name</th><th class="hidden md:table-cell">Email</th><th class="hidden sm:table-cell">Organization</th><th>Enrollment</th><th class="w-24"><span class="sr-only">Actions</span></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  </div>
+  <div id="empty" class="hidden py-10">
+    <p class="font-semibold">No users match these filters.</p>
+    <p class="muted mb-3">Try a different stage or organization, or add the person you are looking for.</p>
+    <button class="btn btn-sm" id="resetF">Clear filters</button>
+  </div>
+</main>
+
+<!-- ============ 3 form ============ -->
+<main id="form" class="screen p-4 lg:p-6 max-w-5xl">
+  <p class="mb-2"><a href="#users" class="link">Users</a> <span class="muted">/</span> Add user</p>
+  <h1 class="text-2xl font-bold mb-5">Add user</h1>
+
+  <div class="mb-6" aria-label="Where this person will start">
+    <div class="flex gap-[3px] max-w-xl">
+      <span class="h-3 flex-1 st-none" style="background:var(--st-none);outline:2px solid var(--color-base-content);outline-offset:2px"></span>
+      <span class="h-3 flex-1" style="background:var(--st-ready);opacity:.35"></span>
+      <span class="h-3 flex-1" style="background:var(--st-wait);opacity:.35"></span>
+      <span class="h-3 flex-1" style="background:var(--st-done);opacity:.35"></span>
+    </div>
+    <p class="text-sm mt-2"><strong>Starts at Not in Knox yet.</strong> <span class="muted">Saving creates the user in Knox and moves them to Ready to invite.</span></p>
+  </div>
+
+  <div class="note mb-6 max-w-3xl" style="--c:var(--color-error)" role="alert">
+    <strong>Fix 3 fields before saving.</strong> Each one is marked below.
+  </div>
+
+  <form class="grid gap-x-6 gap-y-4 sm:grid-cols-2 max-w-3xl" onsubmit="return false" novalidate>
+    <div class="field"><label for="f1">User ID</label>
+      <input id="f1" class="input input-bad w-full" value="Naledi Dlamini" aria-invalid="true" aria-describedby="f1m">
+      <p id="f1m" class="msg err">User ID cannot contain spaces. Use letters, numbers, dots and hyphens, for example naledi.dlamini.</p></div>
+    <div class="field"><label for="f2">User name</label>
+      <input id="f2" class="input w-full" value="naledi.dlamini">
+      <p class="msg muted">The sign-in name on the phone. Usually the same as the user ID.</p></div>
+    <div class="field"><label for="f3">First name</label><input id="f3" class="input w-full" value="Naledi"></div>
+    <div class="field"><label for="f4">Last name</label><input id="f4" class="input w-full" value="Dlamini"></div>
+    <div class="field"><label for="f5">Email</label>
+      <input id="f5" class="input input-bad w-full" value="naledi.dlamini@example" aria-invalid="true" aria-describedby="f5m">
+      <p id="f5m" class="msg err">Enter a full email address, for example naledi.dlamini@example.org.za. The invite is sent here.</p></div>
+    <div class="field"><label for="f6">Contact number</label><input id="f6" class="input w-full" value="+27 82 555 0142"></div>
+    <div class="field"><label for="f7">Employee number</label><input id="f7" class="input w-full" value="E-20418"></div>
+    <div class="field"><label for="f8">Organization</label>
+      <select id="f8" class="select input-bad w-full" aria-invalid="true" aria-describedby="f8m"><option>Choose an organization</option><option>Head Office</option><option>Gauteng</option><option>Johannesburg</option><option>Pretoria</option><option>Western Cape</option><option>Cape Town</option><option>KwaZulu-Natal</option></select>
+      <p id="f8m" class="msg err">Choose the organization this person belongs to.</p></div>
+    <div class="sm:col-span-2 flex gap-2 pt-2">
+      <button class="btn btn-primary">Save user</button>
+      <button class="btn btn-ghost" data-go="users">Cancel</button>
+    </div>
+  </form>
+</main>
+
+<!-- ============ 6 groups ============ -->
+<main id="groups" class="screen p-4 lg:p-6">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <h1 class="text-2xl font-bold">Groups</h1>
+    <span class="muted">User groups in Knox</span>
+    <button class="btn btn-sm btn-primary ml-auto">Create group</button>
+  </div>
+  <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm muted mb-3" aria-label="Legend">
+    <span class="inline-flex items-center gap-1.5"><i class="dot st-none"></i>Not in Knox yet</span>
+    <span class="inline-flex items-center gap-1.5"><i class="dot st-ready"></i>Ready to invite</span>
+    <span class="inline-flex items-center gap-1.5"><i class="dot st-wait"></i>Invited, waiting</span>
+    <span class="inline-flex items-center gap-1.5"><i class="dot st-done"></i>Enrolled</span>
+  </div>
+  <div class="overflow-x-auto"><table class="dense">
+    <thead><tr><th>Name</th><th class="text-right" style="text-align:right">Members</th><th class="w-1/3">Members by enrollment stage</th><th class="w-40"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody id="grows"></tbody>
+  </table></div>
+</main>
+
+<!-- ============ 7 group detail ============ -->
+<main id="group" class="screen p-4 lg:p-6">
+  <p class="mb-2"><a href="#groups" class="link">Groups</a> <span class="muted">/</span> Field Staff</p>
+  <h1 class="text-2xl font-bold mb-3">Field Staff</h1>
+  <div class="note mb-5" style="--c:var(--st-ready)" role="status">
+    <strong>Showing members in Gauteng and its sub-organizations.</strong> Members from other organizations exist in this group but are hidden from you. 9 members in total, 5 shown.
+  </div>
+  <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <section aria-labelledby="mh">
+      <h2 id="mh" class="font-semibold mb-2">Members <span class="num muted font-normal">5</span></h2>
+      <div class="overflow-x-auto"><table class="dense">
+        <thead><tr><th>User ID</th><th>Name</th><th class="hidden sm:table-cell">Organization</th><th>Enrollment</th><th class="w-24"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody id="gmem"></tbody>
+      </table></div>
+    </section>
+    <section aria-labelledby="ah" class="xl:border-l xl:border-base-300 xl:pl-6">
+      <h2 id="ah" class="font-semibold mb-2">Add members</h2>
+      <label for="pq" class="sr-only">Search users to add</label>
+      <input id="pq" type="search" class="input input-sm w-full mb-2" value="an" placeholder="Search by name or user ID">
+      <ul id="picker" class="border-t border-base-300"></ul>
+      <button class="btn btn-sm btn-primary mt-3">Add 2 members</button>
+      <p class="muted text-xs mt-2">Only users in Gauteng and its sub-organizations can be added.</p>
+    </section>
+  </div>
+</main>
+
+<!-- ============ 9 admin ============ -->
+<main id="admin" class="screen p-4 lg:p-6">
+  <h1 class="text-2xl font-bold mb-3">Admin</h1>
+  <div role="tablist" class="flex border-b border-base-300 mb-4">
+    <button role="tab" class="tab" id="tab-acc" aria-selected="true" aria-controls="p-acc">App accounts</button>
+    <button role="tab" class="tab" id="tab-aud" aria-selected="false" aria-controls="p-aud">Audit log</button>
+  </div>
+  <section id="p-acc" role="tabpanel" aria-labelledby="tab-acc">
+    <div class="flex items-center mb-3"><p class="muted">Who can sign in to knoxmgr, and what they can reach.</p><button class="btn btn-sm btn-primary ml-auto">Add account</button></div>
+    <div class="overflow-x-auto"><table class="dense">
+      <thead><tr><th>Username</th><th>Source</th><th>Role</th><th>Organization</th><th>Access</th><th>Status</th><th class="w-20"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody id="accs"></tbody>
+    </table></div>
+  </section>
+  <section id="p-aud" role="tabpanel" aria-labelledby="tab-aud" hidden>
+    <div class="flex flex-wrap gap-2 mb-3"><label class="sr-only" for="aq">Filter audit log</label><input id="aq" type="search" class="input input-sm w-72" placeholder="Filter by who, action or target"></div>
+    <div class="overflow-x-auto"><table class="dense">
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Previous value</th></tr></thead>
+      <tbody id="aud"></tbody>
+    </table></div>
+  </section>
+</main>
+
+</div>
+</div>
+
+<!-- ============ 4 delete dialog ============ -->
+<div id="m-delete" class="scrim">
+  <div class="sheet w-full max-w-lg p-6 danger" role="dialog" aria-modal="true" aria-labelledby="dt">
+    <h2 id="dt" class="text-xl font-bold mb-2">Delete Johan van der Merwe?</h2>
+    <p class="mb-2">This permanently removes <strong>johan.vdmerwe</strong> from Knox. It cannot be undone, and any phone enrolled to this user loses its user link.</p>
+    <p class="mb-4 muted">Their group memberships (Field Staff, Volunteers 2026) are removed too.</p>
+    <div class="field mb-5"><label for="conf">Type johan.vdmerwe to confirm</label>
+      <input id="conf" class="input w-full" autocomplete="off" placeholder="johan.vdmerwe"></div>
+    <div class="flex justify-end gap-2">
+      <button class="btn btn-ghost" data-go="users">Keep user</button>
+      <button id="delBtn" class="btn btn-error" disabled>Delete user</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 5 invite sent ============ -->
+<div id="m-invite" class="scrim">
+  <div class="sheet w-full max-w-xl p-6" role="dialog" aria-modal="true" aria-labelledby="it">
+    <h2 id="it" class="text-xl font-bold mb-1">3 invites sent</h2>
+    <p class="muted mb-4">They now show as Invited, waiting. Each person gets an email with the enrollment link.</p>
+    <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="dot st-wait"></i>Invited</h3>
+    <ul class="mb-5 border-t border-base-300">
+      <li class="flex flex-wrap justify-between gap-x-3 py-1.5 border-b border-base-300"><span>Naledi Dlamini <span class="muted">naledi.dlamini</span></span><span class="muted">naledi.dlamini@example.org.za</span></li>
+      <li class="flex flex-wrap justify-between gap-x-3 py-1.5 border-b border-base-300"><span>Lerato Khumalo <span class="muted">lerato.khumalo</span></span><span class="muted">lerato.khumalo@example.org.za</span></li>
+      <li class="flex flex-wrap justify-between gap-x-3 py-1.5 border-b border-base-300"><span>Fatima Hendricks <span class="muted">fatima.hendricks</span></span><span class="muted">fatima.hendricks@example.org.za</span></li>
+    </ul>
+    <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="dot" style="--c:var(--color-error)"></i>Not invited</h3>
+    <ul class="mb-6 border-t border-base-300">
+      <li class="py-1.5 border-b border-base-300"><strong>pieter.botha</strong> has no email address. <a href="#form" class="link">Add an email</a>, then invite again.</li>
+      <li class="py-1.5 border-b border-base-300"><strong>tshepo.m</strong> was not found in Knox. Check the user ID for typos.</li>
+    </ul>
+    <div class="flex justify-end"><button class="btn btn-primary" data-go="users">Back to users</button></div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const STATES={none:['Not in Knox yet','Add to Knox'],ready:['Ready to invite','Needs an invite'],wait:['Invited, waiting','Not enrolled yet'],done:['Enrolled','Phone connected']};
+const ORGS={n:'Head Office',c:[{n:'Gauteng',c:[{n:'Johannesburg'},{n:'Pretoria'}]},{n:'Western Cape',c:[{n:'Cape Town'}]},{n:'KwaZulu-Natal'}]};
+const D='@example.org.za';
+const U=[
+['thabo.mokoena','Thabo Mokoena','Johannesburg','done'],['naledi.dlamini','Naledi Dlamini','Pretoria','ready'],
+['sipho.nkosi','Sipho Nkosi','KwaZulu-Natal','wait','2 days ago'],['ayesha.patel','Ayesha Patel','Cape Town','done'],
+['johan.vdmerwe','Johan van der Merwe','Pretoria','none'],['lerato.khumalo','Lerato Khumalo','Johannesburg','ready'],
+['pieter.botha','Pieter Botha','Western Cape','ready',null,true],['zanele.mthembu','Zanele Mthembu','KwaZulu-Natal','done'],
+['mandla.zulu','Mandla Zulu','Head Office','wait','6 days ago'],['fatima.hendricks','Fatima Hendricks','Cape Town','ready'],
+['kagiso.molefe','Kagiso Molefe','Gauteng','none'],['anele.ndlovu','Anele Ndlovu','Johannesburg','done'],
+['riaan.pretorius','Riaan Pretorius','Pretoria','wait','9 days ago'],['busisiwe.sithole','Busisiwe Sithole','KwaZulu-Natal','none',null,true],
+['charl.jacobs','Charl Jacobs','Cape Town','ready']
+].map(([id,name,org,st,ago,noMail])=>({id,name,org,st,ago,email:noMail?'':id+D}));
+
+function sub(name,node=ORGS,found=false){ // names of org and all descendants
+  if(node.n===name||found){return [node.n,...(node.c||[]).flatMap(c=>sub(name,c,true))]}
+  return (node.c||[]).flatMap(c=>sub(name,c,false));
+}
+let st=null, org='Head Office', q='', ro=false, sel=new Set(['naledi.dlamini','lerato.khumalo','fatima.hendricks']);
+let rootOrg='Head Office';
+
+function visibleUsers(){ const scope=sub(org); return U.filter(u=>scope.includes(u.org)); }
+function renderTree(){
+  const cnt=n=>U.filter(u=>sub(n).includes(u.org)).length;
+  const node=(o,root)=>`<ul${root?' style="margin-left:0;border:0"':''}><li><button type="button" data-org="${o.n}" ${o.n===org?'aria-current="true"':''}><span>${o.n}</span><span class="num muted">${cnt(o.n)}</span></button>${(o.c||[]).map(c=>node(c)).join('')}</li></ul>`;
+  const rootNode=ro?ORGS.c[0]:ORGS;
+  $('#tree').innerHTML=node(rootNode,true);
+  $('#orgSel').innerHTML=sub(rootNode.n).map(n=>`<option ${n===org?'selected':''}>${n}</option>`).join('');
+  $$('#tree button').forEach(b=>b.onclick=()=>{org=b.dataset.org;render()});
+}
+function renderStrip(){
+  const base=visibleUsers().filter(u=>!q||(u.name+u.id+u.email).toLowerCase().includes(q));
+  const order=['none','ready','wait','done'];
+  $('#strip').classList.toggle('filtering',!!st);
+  $('#strip').innerHTML=order.map((k,i)=>{const n=base.filter(u=>u.st===k).length;
+    return `<button type="button" class="seg st-${k}" style="--w:${Math.max(n,1.2)};--c:var(--st-${k})" data-st="${k}" aria-pressed="${st===k}"><span class="bar"></span><span class="lab"><span class="step">${i+1}</span><span class="cnt num">${n}</span><span>${STATES[k][0]}</span></span><span class="hint">${STATES[k][1]}</span></button>`}).join('');
+  $$('.seg').forEach(b=>b.onclick=()=>{st=st===b.dataset.st?null:b.dataset.st;render()});
+  $('#clearState').hidden=!st;
+  $('#stripNote').textContent=st?`Showing only ${STATES[st][0].toLowerCase()}.`:'Showing everyone. Select a stage to filter.';
+  return base;
+}
+function renderRows(base){
+  const rows=base.filter(u=>!st||u.st===st);
+  $('#rows').innerHTML=rows.map(u=>{
+    const dis=ro||!u.email;
+    const stl=u.st==='wait'?`Invited ${u.ago}`:STATES[u.st][0];
+    return `<tr class="${sel.has(u.id)?'sel':''}"><td><input type="checkbox" class="checkbox checkbox-sm rowchk" data-id="${u.id}" ${sel.has(u.id)?'checked':''} ${dis?'disabled':''} aria-label="Select ${u.name}"></td>
+    <td class="num">${u.id}</td><td class="font-medium">${u.name}</td>
+    <td class="hidden md:table-cell">${u.email||'<span style="color:var(--red-text)">No email. Add one to invite.</span>'}</td>
+    <td class="hidden sm:table-cell">${u.org}</td>
+    <td><span class="inline-flex items-center gap-2 st-${u.st}"><i class="dot"></i>${stl}</span></td>
+    <td class="text-right whitespace-nowrap"><button class="btn btn-xs btn-ghost" ${ro?'disabled':''} data-go="form">Edit</button><button class="btn btn-xs btn-ghost" style="color:var(--red-text)" ${ro?'disabled':''} data-go="delete" aria-label="Delete ${u.name}">Delete</button></td></tr>`}).join('');
+  $('#empty').classList.toggle('hidden',rows.length>0);
+  $$('.rowchk').forEach(c=>c.onchange=()=>{c.checked?sel.add(c.dataset.id):sel.delete(c.dataset.id);updateSel(rows)});
+  $('#all').disabled=ro; $('#all').onchange=e=>{rows.filter(u=>u.email).forEach(u=>e.target.checked?sel.add(u.id):sel.delete(u.id));renderRows(base)};
+  updateSel(rows);
+  bindGo();
+}
+function updateSel(rows){
+  const n=[...sel].filter(id=>rows.some(u=>u.id===id)).length;
+  $$('#rows tr').forEach((tr,i)=>tr.classList.toggle('sel',sel.has(rows[i].id)));
+  $('#inviteBtn').disabled=ro||n===0;
+  $('#inviteBtn').textContent=n&&!ro?`Send enrollment invite to ${n}`:'Send enrollment invite';
+  $('#addBtn').disabled=ro;
+  $('#selLine').textContent=ro?'Your access to Gauteng is read-only. Invites and edits are turned off.':n?`${n} selected. People without an email cannot be selected.`:'Select users to send them an enrollment invite.';
+}
+function render(){
+  $('#roBanner').classList.toggle('hidden',!ro); $('#roReason').classList.toggle('hidden',!ro);
+  $('#scopeLine').textContent=ro?'Gauteng and its sub-organizations':(org==='Head Office'?'Head Office and all sub-organizations':`${org}${sub(org).length>1?' and its sub-organizations':''}`);
+  $('#railTitle').textContent=ro?'Your organization':'Organizations';
+  renderTree(); renderRows(renderStrip());
+}
+$('#orgSel').onchange=e=>{org=e.target.value;render()};
+$('#q').oninput=e=>{q=e.target.value.trim().toLowerCase();render()};
+$('#clearState').onclick=()=>{st=null;render()};
+$('#resetF').onclick=()=>{st=null;q='';$('#q').value='';org=ro?'Gauteng':'Head Office';render()};
+
+/* groups */
+const G=[['Field Staff',[3,2,1,3]],['Finance',[0,1,0,3]],['Drivers',[1,1,2,2]],['Leadership',[0,0,1,3]],['Volunteers 2026',[2,3,1,0]]];
+$('#grows').innerHTML=G.map(([n,c])=>{const t=c.reduce((a,b)=>a+b,0),k=['none','ready','wait','done'];
+  return `<tr><td><a href="#group" class="link font-medium" data-go="group">${n}</a></td><td class="num" style="text-align:right">${t}</td>
+  <td><div class="flex gap-[2px]" role="img" aria-label="${c.map((x,i)=>x+' '+STATES[k[i]][0]).join(', ')}">${c.map((x,i)=>x?`<span style="flex:${x};height:10px;background:var(--st-${k[i]})"></span>`:'').join('')}</div></td>
+  <td class="text-right"><button class="btn btn-xs btn-ghost" data-go="group">Open</button><button class="btn btn-xs btn-ghost" style="color:var(--red-text)">Delete group</button></td></tr>`}).join('');
+const gm=U.filter(u=>sub('Gauteng').includes(u.org)).filter(u=>u.id!=="anele.ndlovu"&&u.id!=="riaan.pretorius");
+$('#gmem').innerHTML=gm.map(u=>`<tr><td class="num">${u.id}</td><td class="font-medium">${u.name}</td><td class="hidden sm:table-cell">${u.org}</td><td><span class="inline-flex items-center gap-2 st-${u.st}"><i class="dot"></i>${STATES[u.st][0]}</span></td><td class="text-right"><button class="btn btn-xs btn-ghost" style="color:var(--red-text)" aria-label="Remove ${u.name} from Field Staff">Remove</button></td></tr>`).join('');
+const pk=[['anele.ndlovu','Anele Ndlovu','Johannesburg',1],['riaan.pretorius','Riaan Pretorius','Pretoria',1]];
+$('#picker').innerHTML=pk.map(([id,n,o,c],i)=>`<li class="border-b border-base-300"><label class="flex items-center gap-3 py-2 cursor-pointer"><input type="checkbox" class="checkbox checkbox-sm" ${c?'checked':''}><span class="grow"><span class="font-medium">${n}</span><br><span class="muted text-xs">${id}, ${o}</span></span></label></li>`).join('');
+
+/* admin */
+const A=[['ops.admin','Local','Admin','All organizations','Write',0],['n.dlamini','AD','User','Gauteng','Write',0],['p.venter','AD','User','Gauteng','Read',0],['t.mokoena','AD','User','Western Cape','Write',0],['s.naidoo','Local','User','KwaZulu-Natal','Read',1],['support','Local','Admin','All organizations','Write',0]];
+$('#accs').innerHTML=A.map(a=>`<tr><td class="font-medium">${a[0]}</td><td>${a[1]}</td><td>${a[2]}</td><td>${a[3]}</td><td>${a[4]}</td><td>${a[5]?'<span style="color:var(--amber-text);font-weight:600">Disabled</span>':'Active'}</td><td class="text-right"><button class="btn btn-xs btn-ghost">${a[5]?'Enable':'Disable'}</button></td></tr>`).join('');
+const L=[['2026-10-12 09:41','n.dlamini','Sent enrollment invite','lerato.khumalo','Enrollment: Ready to invite'],['2026-10-12 09:41','n.dlamini','Sent enrollment invite','naledi.dlamini','Enrollment: Ready to invite'],['2026-10-12 09:12','ops.admin','Updated user','sipho.nkosi','email: sipho.nkosi@old-sample.org.za'],['2026-10-11 16:30','t.mokoena','Added member to group','ayesha.patel to Finance','Not a member'],['2026-10-11 14:02','ops.admin','Disabled account','s.naidoo','Active'],['2026-10-10 11:20','ops.admin','Deleted user','thandi.sibiya','Organization: Pretoria, email: thandi.sibiya@example.org.za'],['2026-10-09 08:55','ops.admin','Created group','Volunteers 2026','Did not exist']];
+$('#aud').innerHTML=L.map(l=>`<tr><td class="num whitespace-nowrap">${l[0]}</td><td>${l[1]}</td><td>${l[2]}</td><td>${l[3]}</td><td><details><summary class="link">Show previous value</summary><p class="pt-1 muted">${l[4]}</p></details></td></tr>`).join('');
+function tab(a){['acc','aud'].forEach(k=>{$('#tab-'+k).setAttribute('aria-selected',k===a);$('#p-'+k).hidden=k!==a})}
+$('#tab-acc').onclick=()=>tab('acc'); $('#tab-aud').onclick=()=>tab('aud');
+
+/* delete confirm */
+$('#conf').oninput=e=>{$('#delBtn').disabled=e.target.value!=='johan.vdmerwe'};
+
+/* navigation */
+const SCREENS=[['signin','1 Sign in'],['users','2 Users list'],['form','3 Add user'],['delete','4 Delete user'],['invite','5 Invite sent'],['groups','6 Groups'],['group','7 Group detail'],['readonly','8 Read-only access'],['admin','9 Admin'],['audit','9b Audit log']];
+$('#screenSel').innerHTML=SCREENS.map(s=>`<option value="${s[0]}">${s[1]}</option>`).join('');
+function go(name){
+  const wasRo=ro; ro=name==='readonly';
+  if(ro!==wasRo){sel=ro?new Set():new Set(['naledi.dlamini','lerato.khumalo','fatima.hendricks']);org=ro?'Gauteng':'Head Office';st=null;q='';$('#q').value=''}
+  const real=name==='audit'?'admin':name;
+  document.body.dataset.screen=real; $('#screenSel').value=name;
+  if(name==='audit')tab('aud'); else if(name==='admin')tab('acc');
+  $$('[data-nav]').forEach(a=>{const m={users:'users',delete:'users',invite:'users',readonly:'users',form:'users',groups:'groups',group:'groups',admin:'admin'}[real];a.toggleAttribute('aria-current',false);if(a.dataset.nav===m)a.setAttribute('aria-current','page')});
+  if(history.replaceState)history.replaceState(null,'','#'+name);
+  render(); requestAnimationFrame(()=>scrollTo(0,0));
+}
+function bindGo(){ $$('[data-go]').forEach(b=>b.onclick=e=>{e.preventDefault();go(b.dataset.go)}); }
+bindGo();
+$('#screenSel').onchange=e=>go(e.target.value);
+$$('a[href^="#"]').forEach(a=>a.onclick=e=>{e.preventDefault();go(a.getAttribute('href').slice(1))});
+$$('[data-nav]').forEach(a=>a.onclick=e=>{e.preventDefault();go(a.dataset.nav)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&['delete','invite'].includes(document.body.dataset.screen))go('users')});
+
+/* theme */
+function theme(dark){document.documentElement.dataset.theme=dark?'harbour-dark':'harbour';$('#themeBtn').setAttribute('aria-pressed',dark);$('#themeBtn').textContent=dark?'Light theme':'Dark theme';}
+$('#themeBtn').onclick=()=>theme(document.documentElement.dataset.theme==='harbour');
+if(location.search.includes('dark'))theme(true);
+addEventListener('hashchange',()=>go(location.hash.slice(1)));
+addEventListener('load',()=>scrollTo(0,0));
+go((location.hash||'#users').slice(1));
+</script>
+</body>
+</html>

@@ -1,0 +1,535 @@
+<!doctype html>
+<!--
+PLAN (rendition 03, Field coordinator)
+1. Palette: cobalt #1F4FD1 (primary), ice #EEF3FF (page wash / tints), ink #14181F (text), white, mint #1E9E6A (success), coral #D2453D (destructive). Dark: ink-blue #0F131A base, cobalt lifted to #7B9BFF.
+2. Type: Figtree only, 400/500/600/800. Body 16px+. Chips 13px/600.
+3. Bold element: page titles, clamp(48px, 9vw, 56px), weight 800, tracking -0.045em. They shrink into the sticky header (small title fades in) once scrolled past. Everything else is quiet.
+4. Mobile first. People are rows, not table cells: 52px initials avatar (tap = select), name, email, org, state chip at right.
+5. Actions: fixed bottom action bar above the tab bar on phones; sticky side panel on md+ (same action list feeds both).
+6. Desktop: one centered column pair (max 1040px: list + 300px panel). Never a wide grid.
+7. Radii: sheets/dialogs 24px top (mobile) / 20px (desktop), chips full, inputs 10px, buttons 12px.
+8. State encoded by chip colour: mint enrolled, cobalt invite sent, grey not invited, coral no email (cannot be invited).
+9. daisyUI 5 custom themes fclight/fcdark set through CSS variables; Tailwind v4 browser build.
+10. Layout ASCII:
+   phone:               desktop:
+   [ Knoxmgr  Users  o]   [ Knoxmgr  Users Groups Admin   o ]
+   Users (56px)           Users (56px)
+   [search][org]          [search][org]        | Selected 3   |
+   (TM) Thandi  [chip]    (TM) Thandi  [chip]  | counts       |
+   (SD) Sipho   [chip]    ...                  | [Send invite]|
+   [Add user][Send (3)]                        | [Add user]   |
+   [Users Groups Admin]
+Generic check: not cream/terracotta, not black/acid green, no hairline broadsheet, no gradient washes. OK.
+-->
+<html lang="en" data-theme="fclight">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knoxmgr - Field coordinator rendition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.43/daisyui.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+<style>
+  [data-theme=fclight]{
+    color-scheme:light;
+    --color-base-100:#fff; --color-base-200:#EEF3FF; --color-base-300:#D5DFF7; --color-base-content:#14181F;
+    --color-primary:#1F4FD1; --color-primary-content:#fff;
+    --color-secondary:#14181F; --color-secondary-content:#fff;
+    --color-accent:#1F4FD1; --color-accent-content:#fff;
+    --color-neutral:#14181F; --color-neutral-content:#fff;
+    --color-info:#1F4FD1; --color-info-content:#fff;
+    --color-success:#1E9E6A; --color-success-content:#fff;
+    --color-warning:#B7791F; --color-warning-content:#fff;
+    --color-error:#D2453D; --color-error-content:#fff;
+    --radius-selector:1rem; --radius-field:.625rem; --radius-box:1.25rem;
+    --size-selector:.25rem; --size-field:.25rem; --border:1px; --depth:0; --noise:0;
+    --muted:#586174; --line:#DCE3F3;
+  }
+  [data-theme=fcdark]{
+    color-scheme:dark;
+    --color-base-100:#0F131A; --color-base-200:#171D29; --color-base-300:#2A3550; --color-base-content:#E9EDF6;
+    --color-primary:#7B9BFF; --color-primary-content:#0B1020;
+    --color-secondary:#E9EDF6; --color-secondary-content:#0F131A;
+    --color-accent:#7B9BFF; --color-accent-content:#0B1020;
+    --color-neutral:#E9EDF6; --color-neutral-content:#0F131A;
+    --color-info:#7B9BFF; --color-info-content:#0B1020;
+    --color-success:#3CC48D; --color-success-content:#06150F;
+    --color-warning:#E0A94A; --color-warning-content:#1b1204;
+    --color-error:#F0716A; --color-error-content:#1c0705;
+    --radius-selector:1rem; --radius-field:.625rem; --radius-box:1.25rem;
+    --size-selector:.25rem; --size-field:.25rem; --border:1px; --depth:0; --noise:0;
+    --muted:#9AA5BD; --line:#252E44;
+  }
+  html{font-family:'Figtree',system-ui,sans-serif;font-size:16px;scroll-padding-top:72px}
+  body{font-family:'Figtree',system-ui,sans-serif;background:var(--color-base-100);color:var(--color-base-content);min-height:100dvh}
+  button,input,select,textarea{font-family:inherit}
+  :focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}
+  .muted{color:var(--muted)}
+  .big{font-size:clamp(48px,9vw,56px);line-height:1;letter-spacing:-.045em;font-weight:800;margin:20px 0 20px;text-wrap:balance}
+  .hdr{height:56px;background:color-mix(in oklab,var(--color-base-100) 92%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid transparent;transition:border-color .2s}
+  .hdr.scrolled{border-bottom-color:var(--line)}
+  .hdr-title{font-weight:800;letter-spacing:-.03em;font-size:20px;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hdr.scrolled .hdr-title{opacity:1;transform:none}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;font-size:13px;font-weight:600;color:var(--muted);flex:1;min-height:56px;justify-content:center}
+  .tab[aria-current=page]{color:var(--color-primary)}
+  .dtab{padding:8px 14px;border-radius:999px;font-weight:600;color:var(--muted)}
+  .dtab[aria-current=page]{background:var(--color-base-200);color:var(--color-primary)}
+  .btn{font-weight:600;min-height:48px;border-radius:12px;font-size:16px;box-shadow:none}
+  .btn-primary{background:var(--color-primary);border-color:var(--color-primary);color:var(--color-primary-content)}
+  .btn-soft2{background:var(--color-base-200);color:var(--color-base-content);border-color:transparent}
+  .btn-danger{background:var(--color-error);border-color:var(--color-error);color:var(--color-error-content)}
+  .btn-quiet-danger{background:transparent;color:var(--color-error);border-color:transparent}
+  .btn[disabled],.btn:disabled{background:var(--color-base-300);color:var(--muted);opacity:.7;border-color:transparent}
+  .field{height:48px;border-radius:10px;border:1px solid var(--color-base-300);background:var(--color-base-100);padding:0 14px;width:100%;font-size:16px}
+  .field:focus{border-color:var(--color-primary)}
+  .field[aria-invalid=true]{border-color:var(--color-error);border-width:2px}
+  .lbl{display:block;font-weight:600;font-size:15px;margin-bottom:6px}
+  .err{color:var(--color-error);font-size:14px;margin-top:6px;font-weight:500}
+  .hint{color:var(--muted);font-size:14px;margin-top:6px}
+  .row{display:flex;align-items:center;gap:14px;min-height:76px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .av{flex:none;width:52px;height:52px;border-radius:999px;display:grid;place-items:center;font-weight:800;font-size:18px;letter-spacing:-.01em;background:var(--color-base-200);color:var(--color-primary);transition:background .15s,color .15s}
+  .av.t1{background:color-mix(in oklab,var(--color-success) 16%,var(--color-base-100));color:var(--color-success)}
+  .av.t2{background:color-mix(in oklab,var(--color-base-content) 9%,var(--color-base-100));color:var(--color-base-content)}
+  .av.sm{width:44px;height:44px;font-size:16px}
+  .av[aria-pressed=true]{background:var(--color-primary);color:var(--color-primary-content)}
+  .av:disabled{cursor:default}
+  .nm{font-weight:600;font-size:17px;line-height:1.25}
+  .sub{color:var(--muted);font-size:15px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rowmain{flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;padding:4px 0}
+  .chip{flex:none;display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;background:var(--color-base-200);color:var(--muted)}
+  .chip::before{content:"";width:7px;height:7px;border-radius:99px;background:currentColor}
+  .s-enrolled{background:color-mix(in oklab,var(--color-success) 14%,var(--color-base-100));color:var(--color-success)}
+  .s-invited{background:color-mix(in oklab,var(--color-primary) 13%,var(--color-base-100));color:var(--color-primary)}
+  .s-none{background:var(--color-base-200);color:var(--muted)}
+  .s-noemail{background:color-mix(in oklab,var(--color-error) 12%,var(--color-base-100));color:var(--color-error)}
+  .plain{background:var(--color-base-200);color:var(--color-base-content)}
+  .plain::before{display:none}
+  .panel{border-radius:20px;background:var(--color-base-200);padding:20px}
+  .modal-box{border-radius:24px 24px 0 0;max-width:34rem;padding:24px;background:var(--color-base-100);box-shadow:none}
+  @media(min-width:640px){.modal-box{border-radius:20px}}
+  .modal::backdrop,.modal{background:transparent}
+  dialog.modal[open]{background:rgb(20 24 31 / .5)}
+  .toast-msg{background:var(--color-neutral);color:var(--color-neutral-content);border-radius:12px;padding:12px 16px;font-weight:600}
+  .seg{display:flex;background:var(--color-base-200);border-radius:12px;padding:4px;gap:4px}
+  .seg button{flex:1;min-height:44px;border-radius:9px;font-weight:600;color:var(--muted)}
+  .seg button[aria-pressed=true]{background:var(--color-base-100);color:var(--color-base-content)}
+  details>summary{list-style:none;cursor:pointer}
+  details>summary::-webkit-details-marker{display:none}
+  .note{display:flex;gap:10px;align-items:flex-start;border-radius:14px;padding:12px 14px;background:var(--color-base-200);font-size:15px;line-height:1.35}
+  .note.warn{background:color-mix(in oklab,var(--color-error) 10%,var(--color-base-100))}
+  .note svg{flex:none;margin-top:2px}
+  .toggle{--tglbg:var(--color-base-100)}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<header id="hdr" class="hdr sticky top-0 z-30">
+  <div class="mx-auto max-w-[1040px] h-full px-4 md:px-8 flex items-center gap-3">
+    <button id="back" class="btn btn-ghost btn-circle -ml-2 hidden" aria-label="Back" data-act="back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <span id="brand" class="font-extrabold tracking-tight text-[18px] text-primary">Knoxmgr</span>
+    <span id="hdr-title" class="hdr-title flex-1 min-w-0 md:hidden"></span>
+    <nav id="dnav" class="hidden md:flex flex-1 gap-1 ml-4" aria-label="Main"></nav>
+    <span class="flex-1 md:hidden"></span>
+    <label class="sr-only" for="jump">Jump to screen</label>
+    <select id="jump" class="field !h-10 !w-auto !text-[14px] !px-2 max-w-[8.5rem]">
+      <option value="">Screens</option>
+      <option value="signin">1 Sign in</option>
+      <option value="users">2 Users list</option>
+      <option value="form">3 Add or edit user</option>
+      <option value="delete">4 Delete user</option>
+      <option value="invited">5 Invite sent</option>
+      <option value="groups">6 Groups list</option>
+      <option value="group">7 Group detail</option>
+      <option value="readonly">8 Read-only</option>
+      <option value="admin">9 Admin</option>
+    </select>
+    <button id="theme" class="btn btn-ghost btn-circle !min-h-10 h-10 w-10" aria-label="Switch to dark theme"></button>
+  </div>
+</header>
+
+<main id="main" class="mx-auto max-w-[1040px] px-4 md:px-8 pb-48 md:pb-20">
+  <div id="grid" class="md:grid md:grid-cols-[minmax(0,1fr)_300px] md:gap-12">
+    <div id="view" class="min-w-0"></div>
+    <aside id="side" class="hidden md:block sticky top-[76px] self-start mt-[96px]" aria-label="Actions"></aside>
+  </div>
+</main>
+
+<div id="bar" class="fixed bottom-0 inset-x-0 z-30 md:hidden bg-base-100 border-t" style="border-color:var(--line);padding-bottom:env(safe-area-inset-bottom)">
+  <div id="actions" class="px-4 pt-3"></div>
+  <nav id="mnav" class="flex px-2" aria-label="Main"></nav>
+</div>
+
+<dialog id="dlg" class="modal modal-bottom sm:modal-middle" aria-labelledby="dlg-title"></dialog>
+<div id="toast" class="toast toast-top toast-center z-50 !top-16 pointer-events-none" aria-live="polite"></div>
+
+<script>
+/* ---------- data ---------- */
+const ORGS=[{id:'ho',name:'Head Office',p:null},{id:'gp',name:'Gauteng',p:'ho'},{id:'jhb',name:'Johannesburg',p:'gp'},{id:'pta',name:'Pretoria',p:'gp'},{id:'wc',name:'Western Cape',p:'ho'},{id:'cpt',name:'Cape Town',p:'wc'},{id:'kzn',name:'KwaZulu-Natal',p:'ho'}];
+const org=id=>ORGS.find(o=>o.id===id);
+const depth=id=>{let d=0,o=org(id);while(o.p){d++;o=org(o.p)}return d};
+const inScope=(o,root)=>{while(o){if(o===root)return true;o=org(o).p}return false};
+const U=(id,first,last,email,o,state,contact,emp)=>({id,first,last,email,org:o,state,contact,emp});
+let USERS=[
+ U('thandi.mokoena','Thandi','Mokoena','thandi.mokoena@vmin.example','gp','enrolled','082 555 0141','10021'),
+ U('sipho.dlamini','Sipho','Dlamini','sipho.dlamini@vmin.example','kzn','invited','083 555 0192','10034'),
+ U('lerato.khumalo','Lerato','Khumalo','lerato.khumalo@vmin.example','jhb','enrolled','071 555 0118','10040'),
+ U('johan.vdmerwe','Johan','van der Merwe','johan.vdmerwe@vmin.example','cpt','none','084 555 0177','10047'),
+ U('naledi.molefe','Naledi','Molefe','naledi.molefe@vmin.example','pta','invited','072 555 0163','10052'),
+ U('pieter.botha','Pieter','Botha','pieter.botha@vmin.example','wc','enrolled','082 555 0120','10058'),
+ U('zanele.nkosi','Zanele','Nkosi','','kzn','none','079 555 0134','10063'),
+ U('ayesha.patel','Ayesha','Patel','ayesha.patel@vmin.example','jhb','enrolled','073 555 0189','10071'),
+ U('bongani.zulu','Bongani','Zulu','bongani.zulu@vmin.example','kzn','invited','081 555 0155','10076'),
+ U('megan.naidoo','Megan','Naidoo','megan.naidoo@vmin.example','cpt','none','076 555 0102','10082'),
+ U('kagiso.sithole','Kagiso','Sithole','kagiso.sithole@vmin.example','pta','none','060 555 0146','10089'),
+ U('fatima.adams','Fatima','Adams','fatima.adams@vmin.example','cpt','enrolled','078 555 0171','10093'),
+ U('themba.ndlovu','Themba','Ndlovu','','jhb','none','082 555 0128','10101'),
+ U('annelie.jacobs','Annelie','Jacobs','annelie.jacobs@vmin.example','wc','invited','074 555 0199','10106'),
+ U('lwazi.mahlangu','Lwazi','Mahlangu','lwazi.mahlangu@vmin.example','ho','enrolled','083 555 0110','10112')];
+let GROUPS=[
+ {name:'Field Staff',m:['thandi.mokoena','sipho.dlamini','lerato.khumalo','johan.vdmerwe','naledi.molefe','ayesha.patel','bongani.zulu','kagiso.sithole','themba.ndlovu','megan.naidoo']},
+ {name:'Finance',m:['pieter.botha','lwazi.mahlangu','annelie.jacobs']},
+ {name:'Drivers',m:['sipho.dlamini','bongani.zulu','kagiso.sithole','themba.ndlovu']},
+ {name:'Leadership',m:['lwazi.mahlangu','thandi.mokoena','pieter.botha']},
+ {name:'Volunteers 2026',m:['lerato.khumalo','naledi.molefe','ayesha.patel','megan.naidoo','fatima.adams','zanele.nkosi']}];
+const ACCOUNTS=[
+ {u:'donovan.d',src:'Local',role:'Admin',org:'All organizations',acc:'Full access',off:false},
+ {u:'thandi.mokoena',src:'AD',role:'User',org:'Gauteng',acc:'Read and write',off:false},
+ {u:'sibusiso.m',src:'AD',role:'User',org:'Western Cape',acc:'Read only',off:false},
+ {u:'nomsa.p',src:'Local',role:'User',org:'KwaZulu-Natal',acc:'Read and write',off:false},
+ {u:'retired.coord',src:'AD',role:'User',org:'Johannesburg',acc:'Read only',off:true}];
+const AUDIT=[
+ {t:'Today 09:14',who:'thandi.mokoena',act:'Sent enrollment invite',tgt:'sipho.dlamini',prev:'Enrollment state: Not invited'},
+ {t:'Today 08:52',who:'donovan.d',act:'Created group',tgt:'Volunteers 2026',prev:'No previous value'},
+ {t:'Yesterday 16:40',who:'thandi.mokoena',act:'Updated user',tgt:'lerato.khumalo',prev:'Contact: 071 555 0100\nEmployee number: 10039'},
+ {t:'Yesterday 11:05',who:'nomsa.p',act:'Added to group',tgt:'bongani.zulu to Drivers',prev:'Groups: Field Staff'},
+ {t:'Mon 14:22',who:'donovan.d',act:'Disabled account',tgt:'retired.coord',prev:'Disabled: no'},
+ {t:'Mon 10:03',who:'donovan.d',act:'Deleted user',tgt:'test.user01',prev:'Name: Test User\nEmail: test.user01@vmin.example\nOrganization: Head Office'}];
+
+/* ---------- state ---------- */
+const S={screen:'users',role:'admin',scope:null,sel:new Set(),q:'',orgf:'all',editing:null,errors:{},vals:{},grp:0,tab:'accounts',stage:'form'};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initials=u=>(u.first[0]+u.last.replace(/^van der /,'')[0]).toUpperCase();
+const full=u=>u.first+' '+u.last;
+const tone=u=>['','t1','t2'][(u.id.length+u.first.charCodeAt(0))%3];
+const stateOf=u=>!u.email?['noemail','No email']:u.state==='enrolled'?['enrolled','Enrolled']:u.state==='invited'?['invited','Invite sent']:['none','Not invited'];
+const chip=u=>{const[k,l]=stateOf(u);return `<span class="chip s-${k}">${l}</span>`};
+const ico={
+ sun:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+ moon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13A9 9 0 1111 3a7 7 0 0010 10z"/></svg>',
+ users:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M17 4a4 4 0 010 8M22 21c0-3-1.5-5-4-5.7"/></svg>',
+ groups:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>',
+ admin:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+ lock:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
+ info:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+ check:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+ chev:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+ search:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>'};
+
+/* ---------- permissions ---------- */
+const canWrite=()=>S.role!=='read';
+const orgName=()=>S.scope?org(S.scope).name:'';
+const readReason=()=>`Your access to ${orgName()} is read-only`;
+const visibleUsers=()=>USERS.filter(u=>(!S.scope||inScope(u.org,S.scope))&&(S.orgf==='all'||inScope(u.org,S.orgf))&&(!S.q||(full(u)+u.id+u.email).toLowerCase().includes(S.q.toLowerCase())));
+
+/* ---------- navigation ---------- */
+const TABS=()=>[['users','Users',ico.users],['groups','Groups',ico.groups],...(S.role==='admin'?[['admin','Admin',ico.admin]]:[])];
+const TITLES={signin:'Sign in',users:'Users',form:'',groups:'Groups',group:'',admin:'Admin'};
+function go(screen,o={}){
+  S.screen=screen;Object.assign(S,o);
+  S.scope=S.role==='admin'?null:'gp';
+  render();window.scrollTo(0,0);
+}
+function render(){
+  const sc=S.screen,view=$('#view');
+  const noChrome=sc==='signin';
+  $('#bar').style.display=noChrome?'none':'';
+  $('#side').style.display=noChrome?'none':'';
+  $('#grid').className=noChrome?'':'md:grid md:grid-cols-[minmax(0,1fr)_300px] md:gap-12';
+  $('#dnav').innerHTML=noChrome?'':TABS().map(([k,l])=>`<button class="dtab" data-go="${k}" ${k===S.screen||(k==='groups'&&sc==='group')||(k==='users'&&sc==='form')?'aria-current="page"':''}>${l}</button>`).join('');
+  $('#mnav').innerHTML=TABS().map(([k,l,i])=>`<button class="tab" data-go="${k}" ${k===S.screen||(k==='groups'&&sc==='group')||(k==='users'&&sc==='form')?'aria-current="page"':''}>${i}${l}</button>`).join('');
+  $('#back').classList.toggle('hidden',!(sc==='form'||sc==='group'));
+  $('#brand').classList.toggle('hidden',sc==='form'||sc==='group');
+  ({signin:vSignin,users:vUsers,form:vForm,groups:vGroups,group:vGroup,admin:vAdmin})[sc]();
+  panel();
+  const t=$('#bigtitle');$('#hdr-title').textContent=t?t.textContent:'';
+  watchTitle();
+}
+let io;
+function watchTitle(){
+  io&&io.disconnect();const t=$('#bigtitle'),h=$('#hdr');
+  if(!t){h.classList.remove('scrolled');return}
+  io=new IntersectionObserver(([e])=>h.classList.toggle('scrolled',!e.isIntersecting),{rootMargin:'-56px 0px 0px 0px'});
+  io.observe(t);
+}
+
+/* ---------- screens ---------- */
+function vSignin(){
+  $('#view').innerHTML=`<div class="mx-auto max-w-[26rem] pt-10 md:pt-24">
+   <p class="font-extrabold text-primary text-[18px] tracking-tight">Knoxmgr</p>
+   <h1 id="bigtitle" class="big">Sign in</h1>
+   <div class="note warn mb-6" role="status">${ico.info.replace('stroke="currentColor"','stroke="var(--color-error)"')}<span><strong>Directory unavailable.</strong> Local accounts still work.</span></div>
+   <form id="signin" class="space-y-5" novalidate>
+    <div><label class="lbl" for="su">Username</label><input id="su" class="field" autocomplete="username" value="donovan.d"></div>
+    <div><label class="lbl" for="sp">Password</label><input id="sp" type="password" class="field" autocomplete="current-password" value="password123"></div>
+    <button class="btn btn-primary w-full" type="submit">Sign in</button>
+   </form></div>`;
+  $('#signin').onsubmit=e=>{e.preventDefault();S.role='admin';go('users')};
+}
+
+function orgOptions(sel,allLabel){
+  return (allLabel?`<option value="all">${allLabel}</option>`:'')+ORGS.filter(o=>!S.scope||inScope(o.id,S.scope)).map(o=>`<option value="${o.id}" ${o.id===sel?'selected':''}>${' '.repeat(depth(o.id)-(S.scope?depth(S.scope):0))}${o.name}</option>`).join('');
+}
+function vUsers(){
+  const ro=S.role==='read';
+  $('#view').innerHTML=`<h1 id="bigtitle" class="big">Users</h1>
+   ${S.scope?`<div class="note ${ro?'warn':''} mb-5">${ro?ico.lock.replace('stroke="currentColor"','stroke="var(--color-error)"'):ico.info}<span>${ro?`<strong>${readReason()}.</strong> You can view people in ${orgName()} and its sub-organizations but not change them.`:`Showing people in ${orgName()} and its sub-organizations.`}</span></div>`:''}
+   <div class="flex flex-col sm:flex-row gap-3 mb-2">
+    <div class="relative flex-1"><span class="absolute left-3 top-1/2 -translate-y-1/2 muted">${ico.search}</span>
+     <label class="sr-only" for="q">Search users</label><input id="q" type="search" class="field !pl-10" placeholder="Search name, email or user ID" value="${esc(S.q)}" autocomplete="off"></div>
+    <div class="sm:w-56"><label class="sr-only" for="orgf">Organization</label><select id="orgf" class="field">${orgOptions(S.orgf,S.scope?`${orgName()} and sub-organizations`:'All organizations')}</select></div>
+   </div>
+   <p id="count" class="muted text-[15px] py-2" aria-live="polite"></p>
+   <ul id="rows"></ul>`;
+  $('#q').oninput=e=>{S.q=e.target.value;rows()};
+  $('#orgf').onchange=e=>{S.orgf=e.target.value;rows()};
+  rows();
+}
+function rows(){
+  const list=visibleUsers(),ro=!canWrite();
+  $('#count').textContent=`${list.length} ${list.length===1?'person':'people'}${S.q||S.orgf!=='all'?' match':''}`;
+  $('#rows').innerHTML=list.length?list.map(u=>`<li class="row">
+    <button class="av ${tone(u)}" ${ro?'disabled':''} data-sel="${u.id}" aria-pressed="${S.sel.has(u.id)}" aria-label="Select ${esc(full(u))}">${S.sel.has(u.id)?ico.check:initials(u)}</button>
+    <button class="rowmain" data-edit="${u.id}"><span class="nm">${esc(full(u))} <span class="muted font-normal text-[15px] hidden sm:inline ml-1">${u.id}</span></span>
+     <span class="sub">${u.email?esc(u.email):'No email address on file'}</span><span class="sub">${org(u.org).name}</span></button>
+    ${chip(u)}</li>`).join(''):`<li class="py-14 text-center"><p class="text-[20px] font-semibold">Nobody matches that search</p><p class="muted mt-1">Check the spelling, or clear the organization filter.</p>${canWrite()?`<button class="btn btn-primary mt-5" data-act="add-user">Add a new user</button>`:''}</li>`;
+  panel();
+}
+
+function vForm(){
+  const u=S.editing?USERS.find(x=>x.id===S.editing):null;
+  const v=Object.keys(S.vals).length?S.vals:(u?{userId:u.id,userName:full(u),first:u.first,last:u.last,email:u.email,contact:u.contact,emp:u.emp,org:u.org}:{userId:'',userName:'',first:'',last:'',email:'',contact:'',emp:'',org:S.scope||'jhb'});
+  S.vals=v;const e=S.errors;
+  const f=(k,label,type='text',extra='',hint='')=>`<div><label class="lbl" for="f-${k}">${label}</label><input id="f-${k}" name="${k}" type="${type}" class="field" value="${esc(v[k])}" ${extra} ${e[k]?`aria-invalid="true" aria-describedby="e-${k}"`:''}>${e[k]?`<p id="e-${k}" class="err">${e[k]}</p>`:hint?`<p class="hint">${hint}</p>`:''}</div>`;
+  $('#view').innerHTML=`<h1 id="bigtitle" class="big">${u?'Edit user':'Add user'}</h1>
+   <form id="uform" class="space-y-5 max-w-[34rem]" novalidate>
+    ${f('userId','User ID','text',`autocomplete="off" ${u?'readonly':''}`,u?'The user ID cannot be changed after the user is created.':'Lowercase letters, numbers, dots and dashes. For example thandi.mokoena.')}
+    ${f('userName','Display name','text','autocomplete="off"')}
+    <div class="grid sm:grid-cols-2 gap-5">${f('first','First name','text','autocomplete="off"')}${f('last','Last name','text','autocomplete="off"')}</div>
+    ${f('email','Email','email','autocomplete="off" inputmode="email"','The enrollment invitation is sent to this address.')}
+    <div class="grid sm:grid-cols-2 gap-5">${f('contact','Contact number','tel','inputmode="tel"')}${f('emp','Employee number','text','inputmode="numeric"')}</div>
+    <div><label class="lbl" for="f-org">Organization</label><select id="f-org" name="org" class="field" ${e.org?'aria-invalid="true"':''}>${orgOptions(v.org)}</select></div>
+    <button class="btn btn-primary w-full md:hidden" type="submit">Save user</button>
+   </form>`;
+  $('#uform').onsubmit=ev=>{ev.preventDefault();saveUser()};
+  $('#uform').oninput=ev=>{if(ev.target.name)S.vals[ev.target.name]=ev.target.value};
+}
+function validate(v){
+  const e={};
+  if(!/^[a-z0-9][a-z0-9.-]{2,39}$/.test(v.userId))e.userId='User ID must be 3 to 40 lowercase letters, numbers, dots or dashes. Remove spaces and capitals.';
+  else if(!S.editing&&USERS.some(u=>u.id===v.userId))e.userId=`"${esc(v.userId)}" is already taken. Choose another, for example ${esc(v.userId)}2.`;
+  if(!v.userName.trim())e.userName='Enter the name to show in Knox, for example Thandi Mokoena.';
+  if(!v.first.trim())e.first='Enter a first name.';
+  if(!v.last.trim())e.last='Enter a last name.';
+  if(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))e.email='This email is missing a domain. Use the form name@example.org.';
+  if(v.contact&&!/^\+?[0-9 ]{7,15}$/.test(v.contact))e.contact='Use digits only, 7 to 15 of them. For example 082 555 0141.';
+  if(v.emp&&!/^[0-9]{3,10}$/.test(v.emp))e.emp='Employee numbers are digits only.';
+  return e;
+}
+function saveUser(){
+  const v={...S.vals};S.errors=validate(v);
+  if(Object.keys(S.errors).length){vForm();panel();const first=$('[aria-invalid=true]');first&&first.focus();return}
+  const rec=U(v.userId,v.first.trim(),v.last.trim(),v.email.trim(),v.org,'none',v.contact,v.emp);
+  const i=USERS.findIndex(u=>u.id===v.userId);
+  if(i>=0){rec.state=USERS[i].state;USERS[i]=rec}else USERS.unshift(rec);
+  S.vals={};S.errors={};S.editing=null;toast(`Saved ${full(rec)}`);go('users');
+}
+
+function vGroups(){
+  $('#view').innerHTML=`<h1 id="bigtitle" class="big">Groups</h1>
+   <ul>${GROUPS.map((g,i)=>`<li class="row"><button class="rowmain !py-3" data-group="${i}"><span class="nm !text-[20px]">${esc(g.name)}</span><span class="sub">${g.m.length} ${g.m.length===1?'member':'members'}</span></button>
+    ${S.role==='admin'?`<button class="btn btn-quiet-danger !min-h-11 !px-3" data-act="delete-group" data-i="${i}" aria-label="Delete group ${esc(g.name)}">Delete group</button>`:''}
+    <span class="muted">${ico.chev}</span></li>`).join('')}</ul>`;
+}
+function groupMembers(){
+  const g=GROUPS[S.grp];return g.m.map(id=>USERS.find(u=>u.id===id)).filter(u=>u&&(!S.scope||inScope(u.org,S.scope)));
+}
+function vGroup(){
+  const g=GROUPS[S.grp],list=groupMembers();
+  $('#view').innerHTML=`<h1 id="bigtitle" class="big">${esc(g.name)}</h1>
+   ${S.scope?`<div class="note mb-4">${ico.info}<span>Showing members in ${orgName()} and its sub-organizations.</span></div>`:''}
+   ${!canWrite()?`<div class="note warn mb-4">${ico.lock.replace('stroke="currentColor"','stroke="var(--color-error)"')}<span>${readReason()}.</span></div>`:''}
+   <p class="muted text-[15px] py-2">${list.length} ${list.length===1?'member':'members'} shown</p>
+   <ul>${list.length?list.map(u=>`<li class="row"><span class="av sm ${tone(u)}">${initials(u)}</span>
+    <span class="rowmain"><span class="nm">${esc(full(u))}</span><span class="sub">${org(u.org).name}</span></span>${chip(u)}
+    <button class="btn btn-quiet-danger !min-h-11 !px-1 sm:!px-3" ${canWrite()?'':'disabled title="'+readReason()+'"'} data-act="remove-member" data-id="${u.id}" aria-label="Remove ${esc(full(u))} from ${esc(g.name)}">Remove</button></li>`).join(''):`<li class="py-14 text-center"><p class="text-[20px] font-semibold">No members yet</p><p class="muted mt-1">Add people so they get this group in Knox.</p></li>`}</ul>`;
+}
+
+function vAdmin(){
+  const acc=S.tab==='accounts';
+  $('#view').innerHTML=`<h1 id="bigtitle" class="big">Admin</h1>
+   <div class="seg mb-4" role="group" aria-label="Admin sections"><button data-tab="accounts" aria-pressed="${acc}">App accounts</button><button data-tab="audit" aria-pressed="${!acc}">Audit log</button></div>
+   ${acc?`<ul>${ACCOUNTS.map(a=>`<li class="row !items-start"><span class="av sm ${a.u==='donovan.d'?'':'t2'} mt-1">${a.u.slice(0,2).toUpperCase()}</span>
+     <div class="rowmain"><span class="nm">${a.u}</span><span class="sub !whitespace-normal">${a.org}, ${a.acc.toLowerCase()}</span>
+     <span class="flex flex-wrap gap-2 mt-2"><span class="chip plain">${a.src==='AD'?'Active Directory':'Local account'}</span><span class="chip plain">${a.role}</span></span></div>
+     <label class="flex items-center gap-2 text-[14px] muted pt-2"><input type="checkbox" class="toggle toggle-sm toggle-error" ${a.off?'checked':''} aria-label="Disabled: ${a.u}" disabled>${a.off?'Disabled':'Active'}</label></li>`).join('')}</ul>`
+   :`<ul>${AUDIT.map(a=>`<li class="border-b" style="border-color:var(--line)"><details class="py-3"><summary class="flex items-start gap-3 min-h-[56px]"><span class="rowmain"><span class="nm">${a.act}</span><span class="sub !whitespace-normal">${esc(a.tgt)}, by ${a.who}</span><span class="sub">${a.t}</span></span><span class="muted pt-1">${ico.chev}</span></summary>
+     <div class="note mt-2"><span><strong>Previous value</strong><br>${esc(a.prev).replace(/\n/g,'<br>')}</span></div></details></li>`).join('')}</ul>`}`;
+}
+
+/* ---------- side panel and mobile action bar ---------- */
+function actionSet(){
+  const sc=S.screen,w=canWrite(),r=readReason(),n=S.sel.size;
+  if(sc==='users'){
+    return {head:`<p class="text-[40px] leading-none font-extrabold tracking-tight">${n}</p><p class="muted mt-1">selected</p>`,
+      stats:stats(visibleUsers()),
+      note:w?(n?'':'Tap an avatar to select people for an invite.'):r,
+      btns:[{l:n?`Send enrollment invite (${n})`:'Send enrollment invite',a:'invite',c:n?'btn-primary':'btn-soft2',d:!w||!n,dr:w?'Select at least one person first':r},
+            {l:'Add user',a:'add-user',c:n?'btn-soft2':'btn-primary',d:!w,dr:r,first:true}]};
+  }
+  if(sc==='form'){
+    return {head:`<p class="text-[22px] leading-tight font-extrabold tracking-tight">${S.editing?'Editing '+esc(S.editing):'New user'}</p>`,note:'Saves to Knox right away.',
+      btns:[{l:'Save user',a:'save-user',c:'btn-primary'},{l:'Cancel',a:'back',c:'btn-soft2'},...(S.editing?[{l:'Delete user',a:'delete-user',c:'btn-quiet-danger',d:!w,dr:r}]:[])]};
+  }
+  if(sc==='groups'){
+    const a=S.role==='admin';
+    return {head:`<p class="text-[40px] leading-none font-extrabold tracking-tight">${GROUPS.length}</p><p class="muted mt-1">groups</p>`,note:a?'':'Only admins create or delete groups.',
+      btns:a?[{l:'Create group',a:'create-group',c:'btn-primary'}]:[]};
+  }
+  if(sc==='group'){
+    const n=groupMembers().length;
+    return {head:`<p class="text-[40px] leading-none font-extrabold tracking-tight">${n}</p><p class="muted mt-1">${n===1?'member':'members'} shown</p>`,note:w?'':r,
+      btns:[{l:'Add members',a:'add-members',c:'btn-primary',d:!w,dr:r}]};
+  }
+  if(sc==='admin'){
+    return {head:`<p class="text-[40px] leading-none font-extrabold tracking-tight">${S.tab==='accounts'?ACCOUNTS.length:AUDIT.length}</p><p class="muted mt-1">${S.tab==='accounts'?'app accounts':'recent changes'}</p>`,note:'Every change to Knox is recorded in the audit log.',btns:[]};
+  }
+  return {head:'',btns:[]};
+}
+function stats(list){
+  const c={enrolled:0,invited:0,none:0,noemail:0};list.forEach(u=>c[stateOf(u)[0]]++);
+  const L={enrolled:'Enrolled',invited:'Invite sent',none:'Not invited',noemail:'No email'};
+  return `<ul class="mt-4 space-y-2">${Object.keys(c).map(k=>`<li class="flex items-center justify-between"><span class="chip s-${k}">${L[k]}</span><span class="font-semibold">${c[k]}</span></li>`).join('')}</ul>`;
+}
+function btnHtml(b,cls=''){return `<button class="btn ${b.c} ${cls}" data-act="${b.a}" ${b.d?`disabled title="${esc(b.dr||'')}"`:''}>${b.l}</button>`}
+function panel(){
+  const a=actionSet();
+  $('#side').innerHTML=`<div class="panel"><div>${a.head}</div>${a.stats||''}${a.note?`<p class="muted text-[15px] mt-4 flex gap-2">${!canWrite()&&a.note===readReason()?ico.lock:''}<span>${a.note}</span></p>`:''}
+    <div class="flex flex-col gap-3 mt-5">${a.btns.map(b=>btnHtml(b,'w-full')).join('')}</div></div>`;
+  const btns=a.btns.length&&S.screen==='users'?[...a.btns].sort((x,y)=>(y.first?1:0)-(x.first?1:0)):a.btns;
+  const mobile=S.screen==='form'?[]:btns;
+  const mnote=S.screen==='users'?(!canWrite()?a.note:''):S.screen==='group'&&!canWrite()?a.note:'';
+  $('#actions').innerHTML=mobile.length?`${mnote?`<p class="flex items-center gap-2 text-[14px] font-medium mb-2" style="color:var(--color-error)">${ico.lock}${mnote}</p>`:''}<div class="flex gap-3 pb-2">${mobile.map(b=>btnHtml(b,b.first?'flex-none !px-5':'flex-1 !px-2 !text-[15px]')).join('')}</div>`:'';
+}
+
+/* ---------- dialogs ---------- */
+const dlg=$('#dlg');
+function openDlg(html){dlg.innerHTML=`<div class="modal-box">${html}</div><form method="dialog" class="modal-backdrop"><button aria-label="Close">close</button></form>`;if(!dlg.open)dlg.showModal();const f=dlg.querySelector('[autofocus]');f&&f.focus()}
+function closeDlg(){dlg.open&&dlg.close()}
+function deleteDlg({what,key,btn,body,onOk}){
+  openDlg(`<h2 id="dlg-title" class="text-[30px] leading-tight font-extrabold tracking-tight">${btn}?</h2>
+   <p class="mt-3 text-[16px]">${body}</p>
+   <div class="mt-5"><label class="lbl" for="confirm">Type <strong>${esc(key)}</strong> to confirm</label><input id="confirm" class="field" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus></div>
+   <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6"><button class="btn btn-soft2" data-act="close">Cancel</button><button id="doDelete" class="btn btn-danger" disabled>${btn}</button></div>`);
+  const i=$('#confirm'),b=$('#doDelete');
+  i.oninput=()=>{b.disabled=i.value.trim()!==key};
+  b.onclick=()=>{closeDlg();onOk()};
+}
+function inviteDlg(ids){
+  const found=ids.map(id=>USERS.find(u=>u.id===id)).filter(Boolean);
+  const ok=found.filter(u=>u.email),noMail=found.filter(u=>!u.email),missing=ids.filter(id=>!USERS.some(u=>u.id===id));
+  const person=u=>`<li class="flex items-center gap-3 py-2"><span class="av sm ${tone(u)}">${initials(u)}</span><span class="rowmain"><span class="nm !text-[16px]">${esc(full(u))}</span><span class="sub">${esc(u.email||'No email address on file')}</span></span></li>`;
+  openDlg(`<div class="flex items-center gap-3"><span class="grid place-items-center w-11 h-11 rounded-full" style="background:var(--color-success);color:var(--color-success-content)">${ico.check}</span></div>
+   <h2 id="dlg-title" class="text-[30px] leading-tight font-extrabold tracking-tight mt-3">${ok.length} ${ok.length===1?'invite':'invites'} sent</h2>
+   <p class="muted mt-1">People get an email with the enrollment link for their phone.</p>
+   <div class="max-h-[40vh] overflow-y-auto mt-4">
+   ${ok.length?`<ul>${ok.map(person).join('')}</ul>`:''}
+   ${noMail.length||missing.length?`<div class="note warn mt-3"><span><strong>Not invited</strong>
+     ${noMail.length?`<br>No email address: ${noMail.map(u=>esc(full(u))+' ('+u.id+')').join(', ')}. Add an email, then invite again.`:''}
+     ${missing.length?`<br>Not found in Knox: ${missing.map(esc).join(', ')}. Check the user ID.`:''}</span></div>`:''}</div>
+   <button class="btn btn-primary w-full mt-6" data-act="close" autofocus>Done</button>`);
+}
+function pickerDlg(){
+  const g=GROUPS[S.grp];
+  const cand=()=>USERS.filter(u=>!g.m.includes(u.id)&&(!S.scope||inScope(u.org,S.scope))&&(!pq.value||(full(u)+u.id).toLowerCase().includes(pq.value.toLowerCase())));
+  openDlg(`<h2 id="dlg-title" class="text-[30px] leading-tight font-extrabold tracking-tight">Add members</h2>
+   <p class="muted mt-1">to ${esc(g.name)}${S.scope?`. You can add people in ${orgName()} and its sub-organizations.`:''}</p>
+   <label class="sr-only" for="pq">Search users</label><input id="pq" type="search" class="field mt-4" placeholder="Search name or user ID" autocomplete="off" autofocus>
+   <ul id="plist" class="max-h-[40vh] overflow-y-auto mt-2"></ul>
+   <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-5"><button class="btn btn-soft2" data-act="close">Cancel</button><button id="pgo" class="btn btn-primary" disabled>Add members</button></div>`);
+  const pq=$('#pq'),picked=new Set();
+  const draw=()=>{const l=cand();$('#plist').innerHTML=l.length?l.map(u=>`<li><label class="row cursor-pointer !min-h-[64px]"><input type="checkbox" class="checkbox checkbox-primary" data-pick="${u.id}" ${picked.has(u.id)?'checked':''}><span class="av sm ${tone(u)}">${initials(u)}</span><span class="rowmain"><span class="nm !text-[16px]">${esc(full(u))}</span><span class="sub">${org(u.org).name}</span></span></label></li>`).join(''):'<li class="py-8 text-center muted">Nobody left to add. Try a different search.</li>';
+    const b=$('#pgo');b.disabled=!picked.size;b.textContent=picked.size?`Add ${picked.size} ${picked.size===1?'member':'members'}`:'Add members'};
+  pq.oninput=draw;
+  $('#plist').onchange=e=>{const id=e.target.dataset.pick;e.target.checked?picked.add(id):picked.delete(id);draw();};
+  $('#pgo').onclick=()=>{g.m.push(...picked);closeDlg();toast(`Added ${picked.size} to ${g.name}`);render()};
+  draw();
+}
+function createGroupDlg(){
+  openDlg(`<h2 id="dlg-title" class="text-[30px] leading-tight font-extrabold tracking-tight">Create group</h2>
+   <p class="muted mt-1">Groups cannot be renamed in Knox, so check the spelling.</p>
+   <form id="gform" novalidate><div class="mt-4"><label class="lbl" for="gname">Group name</label><input id="gname" class="field" autocomplete="off" autofocus><p id="gerr" class="err" hidden></p></div>
+   <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6"><button type="button" class="btn btn-soft2" data-act="close">Cancel</button><button class="btn btn-primary" type="submit">Create group</button></div></form>`);
+  $('#gform').onsubmit=e=>{e.preventDefault();const n=$('#gname').value.trim(),er=$('#gerr');
+    const bad=!n?'Enter a group name.':GROUPS.some(g=>g.name.toLowerCase()===n.toLowerCase())?`A group called "${n}" already exists. Use a different name.`:'';
+    if(bad){er.textContent=bad;er.hidden=false;$('#gname').setAttribute('aria-invalid','true');return}
+    GROUPS.push({name:n,m:[]});closeDlg();toast(`Created ${n}`);render()};
+}
+function toast(m){const t=$('#toast');t.innerHTML=`<div class="toast-msg">${esc(m)}</div>`;clearTimeout(toast.t);toast.t=setTimeout(()=>t.innerHTML='',3500)}
+
+/* ---------- events ---------- */
+function openDeleteUser(id){
+  const u=USERS.find(x=>x.id===id);
+  deleteDlg({what:'user',key:u.id,btn:'Delete user',body:`This permanently deletes <strong>${esc(full(u))}</strong> from Knox. It cannot be undone, and their phone will lose its enrollment.`,
+    onOk:()=>{USERS=USERS.filter(x=>x.id!==id);GROUPS.forEach(g=>g.m=g.m.filter(m=>m!==id));S.sel.delete(id);S.editing=null;S.vals={};toast(`Deleted ${full(u)}`);go('users')}});
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-go],[data-act],[data-sel],[data-edit],[data-group],[data-tab]');if(!t)return;
+  const d=t.dataset;
+  if(d.go){S.errors={};S.vals={};S.editing=null;if(d.go==='users'&&S.role==='read')S.role='write';go(d.go);return}
+  if(d.sel){S.sel.has(d.sel)?S.sel.delete(d.sel):S.sel.add(d.sel);rows();return}
+  if(d.edit){S.errors={};S.vals={};go('form',{editing:d.edit});return}
+  if(d.group){go('group',{grp:+d.group});return}
+  if(d.tab){S.tab=d.tab;vAdmin();panel();return}
+  switch(d.act){
+    case 'close':closeDlg();break;
+    case 'back':S.errors={};S.vals={};S.editing=null;go(S.screen==='group'?'groups':'users');break;
+    case 'add-user':S.errors={};S.vals={};go('form',{editing:null});break;
+    case 'save-user':saveUser();break;
+    case 'delete-user':openDeleteUser(S.editing);break;
+    case 'invite':{const ids=[...S.sel];inviteDlg(ids);USERS.forEach(u=>{if(S.sel.has(u.id)&&u.email&&u.state==='none')u.state='invited'});S.sel.clear();rows();break}
+    case 'add-members':pickerDlg();break;
+    case 'remove-member':{const g=GROUPS[S.grp];g.m=g.m.filter(m=>m!==d.id);toast('Removed from '+g.name);vGroup();panel();break}
+    case 'create-group':createGroupDlg();break;
+    case 'delete-group':{const i=+d.i,g=GROUPS[i];deleteDlg({what:'group',key:g.name,btn:'Delete group',body:`This permanently deletes the group <strong>${esc(g.name)}</strong> in Knox. Its ${g.m.length} members keep their accounts.`,onOk:()=>{GROUPS.splice(i,1);toast(`Deleted ${g.name}`);vGroups();panel()}});break}
+  }
+});
+
+/* ---------- theme and screen jump ---------- */
+function setTheme(dark){document.documentElement.dataset.theme=dark?'fcdark':'fclight';const b=$('#theme');b.innerHTML=dark?ico.sun:ico.moon;b.setAttribute('aria-label',dark?'Switch to light theme':'Switch to dark theme')}
+$('#theme').onclick=()=>setTheme(document.documentElement.dataset.theme==='fclight');
+function demo(n){
+  closeDlg();S.sel.clear();S.q='';S.orgf='all';S.errors={};S.vals={};S.editing=null;S.tab='accounts';
+  S.role='admin';
+  switch(n){
+    case 'signin':go('signin');break;
+    case 'users':go('users');break;
+    case 'form':S.vals={userId:'thandi.mokoena',userName:'Sizwe Ndaba',first:'Sizwe',last:'',email:'sizwe.ndaba@vmin',contact:'082 555',emp:'10130',org:'pta'};S.errors=validate(S.vals);go('form');break;
+    case 'delete':go('users');openDeleteUser('themba.ndlovu');{const i=$('#confirm');i.value='themba.ndlovu';i.dispatchEvent(new Event('input'))}break;
+    case 'invited':go('users');['sipho.dlamini','kagiso.sithole','themba.ndlovu','megan.naidoo','nkosi.z'].forEach(i=>S.sel.add(i));USERS.find(u=>u.id==='sipho.dlamini').state='invited';rows();inviteDlg([...S.sel]);S.sel.clear();rows();break;
+    case 'groups':go('groups');break;
+    case 'group':S.role='write';go('group',{grp:0});break;
+    case 'readonly':S.role='read';go('users');break;
+    case 'admin':go('admin');break;
+  }
+}
+$('#jump').onchange=e=>{if(e.target.value)demo(e.target.value);e.target.value=''};
+setTheme(false);
+window.demo=demo;
+demo(location.hash.slice(1)||'signin');
+</script>
+</body>
+</html>

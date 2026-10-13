@@ -1,0 +1,25 @@
+# Go binaries
+/knoxmgr
+*.exe
+
+# Local config and secrets
+/config.yaml
+*.pem
+*.key
+.env
+
+# Local agent state
+.claude/
+
+# Local databases
+*.db
+*.db-*
+*.db.*
+
+# Web build output
+web/node_modules
+web/build
+web/.svelte-kit
+
+# Build output
+/bin/

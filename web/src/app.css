@@ -1,0 +1,436 @@
+@import 'tailwindcss';
+@plugin 'daisyui' {
+	themes: false;
+}
+
+@plugin 'daisyui/theme' {
+	name: 'fclight';
+	default: true;
+	prefersdark: false;
+	color-scheme: light;
+	--color-base-100: #fff;
+	--color-base-200: #eef3ff;
+	--color-base-300: #d5dff7;
+	--color-base-content: #14181f;
+	--color-primary: #1f4fd1;
+	--color-primary-content: #fff;
+	--color-secondary: #14181f;
+	--color-secondary-content: #fff;
+	--color-accent: #1f4fd1;
+	--color-accent-content: #fff;
+	--color-neutral: #14181f;
+	--color-neutral-content: #fff;
+	--color-info: #1f4fd1;
+	--color-info-content: #fff;
+	--color-success: #1e9e6a;
+	--color-success-content: #fff;
+	--color-warning: #b7791f;
+	--color-warning-content: #fff;
+	--color-error: #d2453d;
+	--color-error-content: #fff;
+	--radius-selector: 1rem;
+	--radius-field: 0.625rem;
+	--radius-box: 1.25rem;
+	--size-selector: 0.25rem;
+	--size-field: 0.25rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+	--muted: #586174;
+	--line: #dce3f3;
+}
+
+@plugin 'daisyui/theme' {
+	name: 'fcdark';
+	default: false;
+	prefersdark: true;
+	color-scheme: dark;
+	--color-base-100: #0f131a;
+	--color-base-200: #171d29;
+	--color-base-300: #2a3550;
+	--color-base-content: #e9edf6;
+	--color-primary: #7b9bff;
+	--color-primary-content: #0b1020;
+	--color-secondary: #e9edf6;
+	--color-secondary-content: #0f131a;
+	--color-accent: #7b9bff;
+	--color-accent-content: #0b1020;
+	--color-neutral: #e9edf6;
+	--color-neutral-content: #0f131a;
+	--color-info: #7b9bff;
+	--color-info-content: #0b1020;
+	--color-success: #3cc48d;
+	--color-success-content: #06150f;
+	--color-warning: #e0a94a;
+	--color-warning-content: #1b1204;
+	--color-error: #f0716a;
+	--color-error-content: #1c0705;
+	--radius-selector: 1rem;
+	--radius-field: 0.625rem;
+	--radius-box: 1.25rem;
+	--size-selector: 0.25rem;
+	--size-field: 0.25rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+	--muted: #9aa5bd;
+	--line: #252e44;
+}
+
+@layer base {
+	html {
+		font-family: 'Figtree', system-ui, sans-serif;
+		font-size: 16px;
+		scroll-padding-top: 72px;
+	}
+	body {
+		background: var(--color-base-100);
+		color: var(--color-base-content);
+		min-height: 100dvh;
+	}
+	button,
+	input,
+	select,
+	textarea {
+		font-family: inherit;
+	}
+	:focus-visible {
+		outline: 3px solid var(--color-primary);
+		outline-offset: 2px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			transition: none !important;
+			animation: none !important;
+			scroll-behavior: auto !important;
+		}
+	}
+}
+
+/* Unlayered on purpose: daisyUI sits in a later layer and would otherwise win over these overrides. */
+	.muted {
+		color: var(--muted);
+	}
+	.big {
+		font-size: clamp(48px, 9vw, 56px);
+		line-height: 1;
+		letter-spacing: -0.045em;
+		font-weight: 800;
+		margin: 20px 0;
+		text-wrap: balance;
+		overflow-wrap: anywhere;
+	}
+	.hdr {
+		height: 56px;
+		background: color-mix(in oklab, var(--color-base-100) 92%, transparent);
+		backdrop-filter: blur(10px);
+		border-bottom: 1px solid transparent;
+		transition: border-color 0.2s;
+	}
+	.hdr.scrolled {
+		border-bottom-color: var(--line);
+	}
+	.hdr-title {
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		font-size: 20px;
+		opacity: 0;
+		transform: translateY(8px);
+		transition:
+			opacity 0.2s,
+			transform 0.2s;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.hdr.scrolled .hdr-title {
+		opacity: 1;
+		transform: none;
+	}
+	.tab {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: 8px 0;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--muted);
+		flex: 1;
+		min-height: 56px;
+		justify-content: center;
+	}
+	.tab[aria-current='page'] {
+		color: var(--color-primary);
+	}
+	.dtab {
+		padding: 8px 14px;
+		border-radius: 999px;
+		font-weight: 600;
+		color: var(--muted);
+	}
+	.dtab:hover {
+		background: var(--color-base-200);
+		color: var(--color-base-content);
+	}
+	.dtab[aria-current='page'] {
+		background: var(--color-base-200);
+		color: var(--color-primary);
+	}
+	.btn {
+		font-weight: 600;
+		min-height: 48px;
+		border-radius: 12px;
+		font-size: 16px;
+		box-shadow: none;
+	}
+	.btn.btn-soft2 {
+		background: var(--color-base-200);
+		color: var(--color-base-content);
+		border-color: transparent;
+	}
+	.btn.btn-danger {
+		background: var(--color-error);
+		border-color: var(--color-error);
+		color: var(--color-error-content);
+	}
+	.btn.btn-quiet-danger {
+		background: transparent;
+		color: var(--color-error);
+		border-color: transparent;
+	}
+	.btn.btn:disabled {
+		background: var(--color-base-300);
+		color: var(--muted);
+		opacity: 0.7;
+		border-color: transparent;
+	}
+	.field {
+		height: 48px;
+		border-radius: 10px;
+		border: 1px solid var(--color-base-300);
+		background: var(--color-base-100);
+		padding: 0 14px;
+		width: 100%;
+		font-size: 16px;
+	}
+	.field:focus {
+		border-color: var(--color-primary);
+	}
+	.field[aria-invalid='true'] {
+		border-color: var(--color-error);
+		border-width: 2px;
+	}
+	.field:disabled,
+	.field[readonly] {
+		background: var(--color-base-200);
+		color: var(--muted);
+	}
+	.lbl {
+		display: block;
+		font-weight: 600;
+		font-size: 15px;
+		margin-bottom: 6px;
+	}
+	.err {
+		color: var(--color-error);
+		font-size: 14px;
+		margin-top: 6px;
+		font-weight: 500;
+	}
+	.hint {
+		color: var(--muted);
+		font-size: 14px;
+		margin-top: 6px;
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		min-height: 76px;
+		padding: 10px 0;
+		border-bottom: 1px solid var(--line);
+	}
+	/* Inset hover: padding and negative margin cancel out, so text stays aligned with non-hover content. */
+	.row-hover {
+		cursor: pointer;
+		position: relative;
+		border-radius: var(--radius-box);
+		padding-inline: 12px;
+		margin-inline: -12px;
+		transition: background 0.15s;
+	}
+	/* The divider is inset to the content edge; a plain border would stick out under the negative margin. */
+	.row.row-hover {
+		border-bottom: 0;
+	}
+	.row.row-hover::after {
+		content: '';
+		position: absolute;
+		inset: auto 12px 0 12px;
+		height: 1px;
+		background: var(--line);
+	}
+	.row.row-hover:hover::after {
+		visibility: hidden;
+	}
+	.row-hover:hover {
+		background: color-mix(in oklab, var(--color-primary) 10%, var(--color-base-100));
+	}
+	.av {
+		flex: none;
+		width: 52px;
+		height: 52px;
+		border-radius: 999px;
+		display: grid;
+		place-items: center;
+		font-weight: 800;
+		font-size: 18px;
+		letter-spacing: -0.01em;
+		background: var(--color-base-200);
+		color: var(--color-primary);
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+	.av.t1 {
+		background: color-mix(in oklab, var(--color-success) 16%, var(--color-base-100));
+		color: var(--color-success);
+	}
+	.av.t2 {
+		background: color-mix(in oklab, var(--color-base-content) 9%, var(--color-base-100));
+		color: var(--color-base-content);
+	}
+	.av.sm {
+		width: 44px;
+		height: 44px;
+		font-size: 16px;
+	}
+	.av[aria-pressed='true'] {
+		background: var(--color-primary);
+		color: var(--color-primary-content);
+	}
+	.av:disabled {
+		cursor: default;
+	}
+	.nm {
+		font-weight: 600;
+		font-size: 17px;
+		line-height: 1.25;
+	}
+	.sub {
+		color: var(--muted);
+		font-size: 15px;
+		line-height: 1.3;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rowmain {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		text-align: left;
+		padding: 4px 0;
+	}
+	.chip {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		border-radius: 999px;
+		padding: 5px 11px;
+		font-size: 13px;
+		font-weight: 600;
+		background: var(--color-base-200);
+		color: var(--muted);
+	}
+	.chip::before {
+		content: '';
+		width: 7px;
+		height: 7px;
+		border-radius: 99px;
+		background: currentColor;
+	}
+	.s-noemail {
+		background: color-mix(in oklab, var(--color-error) 12%, var(--color-base-100));
+		color: var(--color-error);
+	}
+	.plain {
+		background: var(--color-base-200);
+		color: var(--color-base-content);
+	}
+	.plain::before {
+		display: none;
+	}
+	.panel {
+		border-radius: 20px;
+		background: var(--color-base-200);
+		padding: 20px;
+	}
+	.modal-box {
+		border-radius: 24px 24px 0 0;
+		max-width: 34rem;
+		padding: 24px;
+		background: var(--color-base-100);
+		box-shadow: none;
+	}
+	@media (min-width: 640px) {
+		.modal-box {
+			border-radius: 20px;
+		}
+	}
+	.dlg-title {
+		font-size: 30px;
+		line-height: 1.15;
+		font-weight: 800;
+		letter-spacing: -0.025em;
+	}
+	.toast-msg {
+		background: var(--color-neutral);
+		color: var(--color-neutral-content);
+		border-radius: 12px;
+		padding: 12px 16px;
+		font-weight: 600;
+	}
+	.seg {
+		display: flex;
+		background: var(--color-base-200);
+		border-radius: 12px;
+		padding: 4px;
+		gap: 4px;
+	}
+	.seg button {
+		flex: 1;
+		min-height: 44px;
+		border-radius: 9px;
+		font-weight: 600;
+		color: var(--muted);
+	}
+	.seg button[aria-pressed='true'] {
+		background: var(--color-base-100);
+		color: var(--color-base-content);
+	}
+	.note {
+		display: flex;
+		gap: 10px;
+		align-items: flex-start;
+		border-radius: 14px;
+		padding: 12px 14px;
+		background: var(--color-base-200);
+		font-size: 15px;
+		line-height: 1.35;
+	}
+	.note.warn {
+		background: color-mix(in oklab, var(--color-error) 10%, var(--color-base-100));
+	}
+	.note svg {
+		flex: none;
+		margin-top: 2px;
+	}
+	.note.warn svg {
+		color: var(--color-error);
+	}
