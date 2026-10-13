@@ -10,10 +10,13 @@
 	let loc = $state<DeviceLocation | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	// The history point the user picked; null shows the whole period.
+	let selected = $state<GeoPoint | null>(null);
 
 	$effect(() => {
 		const deviceId = id;
 		const period = days;
+		selected = null;
 		loading = true;
 		error = '';
 		getDeviceLocation(deviceId, period)
@@ -34,12 +37,14 @@
 			(p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && Math.abs(p.latitude) <= 90 && Math.abs(p.longitude) <= 180
 		)
 	);
+	const sel = $derived(selected && points.includes(selected) ? selected : null);
 	const showMap = $derived(!!loc?.showMap && points.length > 0 && !error);
 
 	// Rebuilt whenever the points or the container change; cleanup destroys the map.
 	$effect(() => {
 		const el = mapEl;
 		const pts = points;
+		const one = sel;
 		if (!el || !pts.length) return;
 		let map: import('leaflet').Map | undefined;
 		let cancelled = false;
@@ -54,12 +59,26 @@
 				referrerPolicy: 'strict-origin-when-cross-origin',
 				attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>'
 			}).addTo(map);
+			const dot = (p: GeoPoint, style: import('leaflet').CircleMarkerOptions) => {
+				const m = L.circleMarker([p.latitude, p.longitude], style).addTo(map!);
+				const r = style.radius ?? 4;
+				m.bindTooltip(when(p.time));
+				m.on('mouseover', () => m.setRadius(r + 3));
+				m.on('mouseout', () => m.setRadius(r));
+				m.on('click', () => (selected = p));
+				return m;
+			};
+			if (one) {
+				dot(one, { radius: 9, color: '#fff', fillColor: '#dc2626', fillOpacity: 1, weight: 3 });
+				map.setView([one.latitude, one.longitude], 15);
+				return;
+			}
 			const latlngs = pts.map((p): [number, number] => [p.latitude, p.longitude]);
 			if (latlngs.length > 1) L.polyline(latlngs, { color: '#2563eb', weight: 3, opacity: 0.7 }).addTo(map);
-			for (const ll of latlngs) L.circleMarker(ll, { radius: 4, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1, weight: 1 }).addTo(map);
+			for (const p of pts) dot(p, { radius: 4, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1, weight: 1 });
 			// The latest point is drawn last so it sits on top.
 			const latest = pts.reduce((a, b) => (new Date(b.time) > new Date(a.time) ? b : a));
-			L.circleMarker([latest.latitude, latest.longitude], { radius: 9, color: '#fff', fillColor: '#dc2626', fillOpacity: 1, weight: 3 }).addTo(map);
+			dot(latest, { radius: 9, color: '#fff', fillColor: '#dc2626', fillOpacity: 1, weight: 3 });
 			map.fitBounds(L.latLngBounds(latlngs), { padding: [24, 24], maxZoom: 16 });
 		})();
 		return () => {
@@ -67,6 +86,17 @@
 			map?.remove();
 		};
 	});
+
+	let tableEl = $state<HTMLDivElement>();
+	$effect(() => {
+		if (sel) tableEl?.querySelector('tr[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+	});
+
+	function pick(e: KeyboardEvent, p: GeoPoint) {
+		if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+		e.preventDefault();
+		selected = p;
+	}
 
 	// Only build a link from coordinates that are real and in range.
 	function mapUrl(p: GeoPoint): string | null {
@@ -80,7 +110,7 @@
 {#snippet coords(p: GeoPoint)}
 	{@const url = mapUrl(p)}
 	{#if url}
-		<a href={url} target="_blank" rel="noopener noreferrer" class="link">{p.latitude}, {p.longitude}</a>
+		<a href={url} target="_blank" rel="noopener noreferrer" class="link" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>{p.latitude}, {p.longitude}</a>
 	{:else}
 		{p.latitude}, {p.longitude}
 	{/if}
@@ -121,23 +151,32 @@
 		</div>
 	{/if}
 	<label class="muted text-[15px]" for="loc-days">History period</label>
-	<select id="loc-days" class="field mb-2" bind:value={days}>
-		<option value={1}>Last day</option>
-		<option value={7}>Last 7 days</option>
-		<option value={30}>Last 30 days</option>
-	</select>
+	<div class="mb-2 flex flex-wrap items-center gap-2">
+		<select id="loc-days" class="field" bind:value={days}>
+			<option value={1}>Last day</option>
+			<option value={7}>Last 7 days</option>
+			<option value={30}>Last 30 days</option>
+		</select>
+		{#if sel}<button type="button" class="btn btn-sm" onclick={() => (selected = null)}>Show all</button>{/if}
+	</div>
 	{#if loading}
 		<div><span class="loading loading-spinner"></span></div>
 	{:else if loc && !error}
 		{#if showMap}
 			<div bind:this={mapEl} class="relative z-0 mb-3 h-64 w-full overflow-hidden rounded-lg border border-base-300 sm:h-96" role="img" aria-label="Map of device location history"></div>
 		{/if}
-		<div class="max-h-[30rem] overflow-auto">
+		<div bind:this={tableEl} class="max-h-[30rem] overflow-auto">
 			<table class="table table-pin-rows">
 				<thead><tr><th>Time</th><th>Latitude, longitude</th><th>Altitude</th></tr></thead>
 				<tbody>
 					{#each loc.history as p}
-						<tr><td>{when(p.time)}</td><td>{@render coords(p)}</td><td>{p.altitude ?? '-'}</td></tr>
+						<tr
+							tabindex="0"
+							aria-selected={p === sel}
+							class="cursor-pointer rounded-lg hover:bg-base-200 {p === sel ? 'bg-primary/15 hover:bg-primary/20' : ''}"
+							onclick={() => (selected = p)}
+							onkeydown={(e) => pick(e, p)}
+						><td>{when(p.time)}</td><td>{@render coords(p)}</td><td>{p.altitude ?? '-'}</td></tr>
 					{:else}
 						<tr><td colspan="3" class="muted">No locations in this period</td></tr>
 					{/each}

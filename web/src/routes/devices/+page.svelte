@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { ApiError } from '#lib/api/client';
 	import { listDevices, type Device } from '#lib/api/devices';
 	import KnoxOffline from '#components/KnoxOffline.svelte';
@@ -27,12 +28,24 @@
 		load();
 	});
 
+	const filters: [string, string][] = [
+		['enrolled', 'Enrolled'],
+		['unenrolled', 'Unenrolled'],
+		['all', 'All']
+	];
+	// Unknown values fall back to enrolled.
+	const filter = $derived.by(() => {
+		const f = page.url.searchParams.get('filter') ?? '';
+		return filters.some(([k]) => k === f) ? f : 'enrolled';
+	});
+
 	const visible = $derived.by(() => {
 		const needle = q.trim().toLowerCase();
 		return devices.filter(
 			(d) =>
-				!needle ||
-				`${d.modelName} ${d.deviceName ?? ''} ${d.os} ${d.userName ?? ''} ${d.userId ?? ''}`.toLowerCase().includes(needle)
+				(filter === 'all' || d.enrolled === (filter === 'enrolled')) &&
+				(!needle ||
+				`${d.modelName} ${d.deviceName ?? ''} ${d.os} ${d.userName ?? ''} ${d.userId ?? ''}`.toLowerCase().includes(needle))
 		);
 	});
 
@@ -46,6 +59,17 @@
 	<span class="muted absolute top-1/2 left-3 -translate-y-1/2"><Icon name="search" size={20} /></span>
 	<label class="sr-only" for="q">Search devices</label>
 	<input id="q" type="search" class="field !pl-10" placeholder="Search model, name, OS or user" autocomplete="off" bind:value={q} />
+</div>
+
+<div class="mb-3 inline-flex max-w-full gap-1 rounded-full bg-base-200 p-1" role="group" aria-label="Filter devices">
+	{#each filters as [key, label] (key)}
+		<a
+			href="?filter={key}"
+			class="flex min-h-10 items-center rounded-full px-4 font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary {filter === key ? 'bg-base-100 text-primary shadow-sm' : 'text-[var(--muted)] hover:text-base-content'}"
+			aria-current={filter === key ? 'true' : undefined}
+			data-sveltekit-noscroll>{label}</a
+		>
+	{/each}
 </div>
 
 {#if loading}
@@ -70,15 +94,15 @@
 					<span class="sub">{d.deviceName ? `${d.modelName} · ` : ''}{d.os}{d.osVersion ? ` ${d.osVersion}` : ''} · {d.status}</span>
 					<span class="sub">Last connection: {when(d)}</span>
 				</a>
-				<DeviceBadge freshness={d.freshness} />
 				{#if d.userId}
 					<a href="/users/{encodeURIComponent(d.userId)}" class="link relative z-10">{d.userName || d.userId}</a>
 				{/if}
+				<DeviceBadge freshness={d.freshness} />
 			</li>
 		{:else}
 			<li class="py-14 text-center">
-				<p class="text-[20px] font-semibold">{devices.length ? 'No device matches that search' : 'No devices yet'}</p>
-				<p class="muted mt-1">{devices.length ? 'Check the spelling.' : 'Enrolled devices will appear here.'}</p>
+				<p class="text-[20px] font-semibold">{devices.length ? 'No device matches' : 'No devices yet'}</p>
+				<p class="muted mt-1">{devices.length ? 'Check the spelling, or change the filter.' : 'Enrolled devices will appear here.'}</p>
 			</li>
 		{/each}
 	</ul>

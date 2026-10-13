@@ -315,6 +315,38 @@
 	.av:disabled {
 		cursor: default;
 	}
+	/* Toggle avatars stack initials and glyphs in one grid cell and cross-fade them. */
+	button.av > * {
+		grid-area: 1 / 1;
+		transition: opacity 0.15s;
+	}
+	.av-ic {
+		opacity: 0;
+	}
+	.av[aria-pressed='true'] .av-check {
+		opacity: 1;
+	}
+	.av[aria-pressed='true'] .av-init {
+		opacity: 0;
+	}
+	/* Hover/focus previews the action a click performs: + to select, minus to deselect. */
+	@media (hover: hover) {
+		.av:not(:disabled):hover,
+		.av:not(:disabled):focus-visible {
+			background: var(--color-primary);
+			color: var(--color-primary-content);
+		}
+		.av:not(:disabled):hover > *,
+		.av:not(:disabled):focus-visible > * {
+			opacity: 0;
+		}
+		.av:not(:disabled):not([aria-pressed='true']):hover .av-plus,
+		.av:not(:disabled):not([aria-pressed='true']):focus-visible .av-plus,
+		.av:not(:disabled)[aria-pressed='true']:hover .av-minus,
+		.av:not(:disabled)[aria-pressed='true']:focus-visible .av-minus {
+			opacity: 1;
+		}
+	}
 	.nm {
 		font-weight: 600;
 		font-size: 17px;
