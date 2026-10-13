@@ -131,12 +131,22 @@ The group screen opens with Members, Apps and Profiles counts (apps and profiles
 sync). Tap member avatars to select them and use **Remove from group (N)** to remove several at once. Admins
 delete a group from its own screen, not from the groups list.
 
-The device screen also shows live details, installed apps and (admins and write users only) location
+The device screen also shows live details and (admins and write users only) location
 from Knox, with the last answer kept for when Knox is unreachable. Location is drawn on an embedded
 map (Leaflet, tiles from OpenStreetMap) with a coordinates table and an OpenStreetMap link. Admins can
 turn the map off under Admin > Settings > General > **Show map**: the viewer's browser loads tiles
 from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed.
 Tile requests carry the app origin (never the page path) as Referer, as OpenStreetMap's tile policy requires.
+
+Installed apps are mirrored per device too. Every few hours (General setting, 1 to 168, default 6) knoxmgr
+pulls each enrolled device's app list from Knox; it also pulls a device when you open its Applications tab
+and every device on **Sync now**. Once a day, if switched on, it asks enrolled Android devices to report
+their apps afresh. The **Apps** page lists every app seen on devices in your scope, grouped by category,
+with the number of devices; open an app to see which devices have it. Write users and admins can uninstall
+an app (never system, Knox-managed, mandatory or management apps, which show "Protected") from selected Android devices (after a confirmation; Knox carries it out and the list
+updates at the next pull). Categories: `System` is automatic, `Other` is built-in, the rest are managed by admins under
+Admin > Settings > **App categories** (some are pre-filled; unknown apps are `Other`). App icons are
+generated letters, not store images, so nothing is fetched from outside.
 
 ## Vocabulary
 
@@ -166,6 +176,9 @@ that org and all of its sub-orgs, never its parent or siblings.
 | Create, update, purge Knox users | yes | no | in scope |
 | View devices | all, incl. unassigned | owner in scope | owner in scope |
 | View device location (every view audited) | all | no | in scope |
+| View installed apps (devices in scope) | all | in scope | in scope |
+| Uninstall an app from Android devices | yes | no | in scope |
+| Manage app categories | yes | no | no |
 | Send enrollment invitations | yes | no | in scope |
 | View user groups | all, all members | all groups, members filtered to scope | same as read |
 | Add or remove members of a group | any user | no | in-scope users only |

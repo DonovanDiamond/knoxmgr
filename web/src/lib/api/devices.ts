@@ -48,11 +48,6 @@ export interface DeviceDetail {
 	cached: boolean;
 	canViewLocation: boolean;
 }
-export interface DeviceApp {
-	name: string;
-	packageName: string;
-	version: string;
-}
 export interface GeoPoint {
 	time: string;
 	latitude: number;
@@ -69,7 +64,5 @@ export interface DeviceLocation {
 }
 
 export const getDeviceDetail = (id: string) => api<DeviceDetail>(`/api/knox/devices/${seg(id)}/detail`);
-export const getDeviceApps = (id: string) =>
-	api<{ apps: DeviceApp[]; fetchedAt: string; cached: boolean }>(`/api/knox/devices/${seg(id)}/apps`);
 export const getDeviceLocation = (id: string, days: 1 | 7 | 30) =>
 	api<DeviceLocation>(`/api/knox/devices/${seg(id)}/location?days=${days}`);

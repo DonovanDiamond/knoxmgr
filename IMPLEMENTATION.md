@@ -21,7 +21,7 @@ src/settings/  Manager: validates and saves Knox / AD / general settings, rebuil
 src/db/        connection, dialect shim, embedded migrations, repositories
 src/auth/      local + AD login, password hashing, JWT issue/verify, keys, refresh rotation, role helpers, org Scope, login rate limiter, first-run SetupCode
 src/knox/      typed Knox Manage client (OAuth token reuse, users, groups, orgs)
-src/sync/      Scheduler: background Knox-to-mirror sync (interval, triggers, single-flight)
+src/sync/      Scheduler: background Knox-to-mirror sync (interval, triggers, single-flight); Inventory: per-device app pulls
 src/knoxmock/  in-memory fake Knox server (development and tests)
 src/api/       fiber routes, middleware, JSON error shape, audit recording, embedded-UI serving
 cmd/knoxmock/  runs the fake Knox server
@@ -125,6 +125,7 @@ secrets, saves with an audit row, and applies the change live (no restart): it s
   the signing-in user. A `ldap://` URL logs a warning when applied.
 - **General**: `installationName` and `syncIntervalMinutes` (1-1440, default 15). The name is
   returned by `/api/health`. Saving it makes the sync loop re-read the interval at once.
+  `appInventoryHours` (1-168, default 6) is how often installed apps are pulled from Knox; `appReportDaily` (default on; omitted on PUT keeps the stored value) asks enrolled Android devices to report their apps once a day.
   `showMap` (default on; omitted on PUT keeps the stored value) controls the device location map.
   The toggle carries a privacy note: the viewer's browser loads tiles from OpenStreetMap.
 
@@ -185,7 +186,8 @@ get foreign keys on, WAL and a 5s busy timeout.
   as a whole on each AD save.
 - `general_settings` — one row (`id` = 1): `installation_name` (default `knoxmgr`),
   `sync_interval_minutes` (default 15, CHECK 1-1440), `show_map` (0/1, default 1, migration
-  `0007`), `updated_at`.
+  `0007`), `app_inventory_hours` (CHECK 1-168, default 6) and `app_report_daily` (0/1, default 1)
+  from migration `0009`, `updated_at`.
 - Knox mirror (migration `0004`), keyed by the Knox ids, every row with `synced_at`: `knox_orgs`
   (`org_code`, `org_name`, `parent_code`), `knox_users` (profile fields, `org_code`, `enabled`,
   `device_count`), `knox_groups` (USER groups; `user_count` is recomputed from memberships),
@@ -193,6 +195,13 @@ get foreign keys on, WAL and a 5s busy timeout.
 - `knox_device_cache` (migration `0005`) — `device_id`, `kind` (`detail`, `apps`, `location:1`/`:7`/`:30`),
   `payload` (JSON), `fetched_at`; primary key (`device_id`, `kind`). The last live Knox answer, served only
   while Knox is unreachable. Not part of the bulk sync; `ReplaceAll` deletes rows of devices the sync dropped.
+- App inventory (migration `0009`): `device_apps` (`device_id`, `package`, `name`, `version`, `system`,
+  `managed`, `installed_at`, `knox_id`, `uninstall_requested_at`, `synced_at`; primary key device+package;
+  index on `package`), `app_categories` (`id`, unique `name`), `app_category_map` (`package` pk, `category_id`
+  fk, cascade delete) and `app_inventory` (one row: `last_pull_at`, `last_report_request_at`). The
+  migration seeds nine categories and 66 well-known package mappings; `System` is not a row, it is
+  derived from `device_apps.system`, and an unmapped package shows as `Other`. Migration `0010` adds
+  `device_apps.mandatory` and a few more seed mappings.
 - `sync_runs` — `id`, `trigger` (`startup`, `scheduled`, `knox_saved`, `manual`), `started_at`,
   `finished_at` (null while running), `status` (`running`|`ok`|`failed`), `error`, and counts
   `orgs`, `users`, `groups`, `memberships`, `devices` (zero on failure).
@@ -202,7 +211,9 @@ Audit actions: `setup.create_admin`, `user.create_admin_cli`, `settings.set`,
 `app_user.create`, `app_user.update`, `app_user.delete`;
 `knox.user.create`, `knox.user.update`, `knox.user.purge`, `knox.user.invite`;
 `knox.group.create`, `knox.group.delete`, `knox.group.add_members`, `knox.group.remove_members`;
-`admin.sync.start`.
+`admin.sync.start`;
+`device.app.uninstall` (one per device), `device.apps.refresh`, `device.apps.report_request` (actor `system`, `sent=N failed=N`);
+`app.category.create`, `app.category.rename`, `app.category.delete`, `app.category.assign`.
 Rows hold actor, target and previous/new value (JSON; never passwords). The API writes the row
 after the Knox/DB change succeeded; a failed audit write is logged, not returned. Logins are not
 audited.
@@ -228,6 +239,7 @@ caller's org and descendants; admins unrestricted). Devices are scoped by the ow
   group counts are recomputed.
 - **Failure keeps the mirror**: any fetch or write error rolls back, the mirror stays as it was, and
   the `sync_runs` row ends `failed` with the error text.
+- **App inventory** (`src/sync/apps.go`, not part of the replace-set): see App inventory below. `Scheduler.OnSynced` calls `Inventory.AfterSync` after every successful run.
 - **Write-through**: after Knox accepts a user create/update/purge, group create/delete or
   membership change, the mirror row is patched; if that patch fails it is logged and the next sync
   repairs it. The audit row is written as before.
@@ -258,6 +270,31 @@ caller's org and descendants; admins unrestricted). Devices are scoped by the ow
 - Refresh cookie: name `knoxmgr_refresh`, `Path=/api/auth`, `HttpOnly`, `SameSite=Strict`,
   `Secure` unless `secureCookies: false`, `Max-Age` = `refreshTTL`. Cleared (`Max-Age=-1`) on logout
   and on a failed refresh.
+
+## App inventory (M13)
+
+- **Mirror**: `device_apps` holds each enrolled device's Knox app list. `sync.Inventory.PullDevice`
+  pages `selectDeviceAppList` (1000 per page, at most 10) and replaces the device's rows in one
+  transaction. `PullAll` covers enrolled devices (Knox status `A`, `B`, `BS`, `BA`, `BL`) with 4
+  workers, one run at a time; a device that fails is logged and counted, the run continues.
+- **When**: `Inventory.Start` checks every minute and pulls when `appInventoryHours` have passed since the
+  persisted `last_pull_at` (restarts do not repeat work). After a mirror sync, `manual` (Sync now)
+  always pulls; other triggers pull only when due. Opening a device's Applications tab pulls that
+  device (Android only; a Knox failure serves the mirror with `stale`).
+- **Daily report**: with `appReportDaily` on, once per 24h (`last_report_request_at`) every enrolled
+  Android device is asked to report (`sendDeviceControlForSyncInstalledAppList`); one summary audit row
+  `device.apps.report_request` with `sent` and `failed`. New lists arrive with the next pull.
+- **Categories**: `System` is automatic from Knox's `systemApp`; other apps take the admin-managed
+  mapping, else `Other`. Seeded defaults are editable; no Play Store lookups.
+- **Parsing**: the spec gives no value set for `systemApp`, `isManaged` or `mandatoryApp`; `knox.DeviceApp`
+  treats `Y`/`yes`/`true`/`1` (any case) as true.
+- **Uninstall**: write users and admins, Android only, never system apps. Per device: scope and write
+  check, `sendDeviceControlForUninstallApp` (with `knoxId` when the row has one), the mirror row is marked
+  `uninstall_requested_at` until the next pull replaces it, one audit row. The UI asks for confirmation.
+- **Scope**: apps are visible through in-scope devices (owner's org and sub-orgs, via the central scope
+  check); counts and device lists never include out-of-scope devices.
+- **Icons**: `AppIcon` draws a monogram from the app name with a hue hashed from the package. No requests; CSP unchanged.
+- **Mock**: `knoxmock` serves paged app lists with `systemApp`/`isManaged` as `Y`/`N`, an uninstall that persists, and the report request.
 
 ## API
 
@@ -295,7 +332,14 @@ string or body).
 | `GET /api/knox/devices/:id` | Bearer; carries the same per-device `freshness`; 404 if absent in Knox, out of scope, or unassigned for a non-admin |
 | `GET /api/knox/users/:id/devices` | Bearer; `{devices, total}` with per-device `freshness`; 404 if the user is out of scope |
 | `GET /api/knox/devices/:id/detail` | Bearer; same scope/404 as the device; live from Knox (`selectDeviceInfo` detail): `{info, profiles, fetchedAt, cached, canViewLocation}`. On `knox_unreachable` the last cached answer is returned with `cached: true`; Knox business errors are not masked |
-| `GET /api/knox/devices/:id/apps` | Bearer; same; `{apps: [{name, packageName, version}], fetchedAt, cached}` (up to 1000 apps) |
+| `GET /api/knox/devices/:id/apps` | Bearer; same scope/404; pulls the device from Knox first (Android only), then answers from the mirror: `{apps: [{package, name, version, system, managed, installedAt, category, categoryId, uninstallRequested}], syncedAt, stale, android}`; `stale` when the pull failed, `syncedAt` falls back to the global last pull |
+| `POST /api/knox/devices/:id/apps/refresh` | write (device's org); Android only (else 400); asks the device to report its apps again, 202 `{requested}`; audited `device.apps.refresh` |
+| `GET /api/knox/apps` | Bearer; `?search=`, `?category=`, `?system=true`; `{apps: [{package, name, system, category, categoryId, deviceCount}]}` counting in-scope devices only |
+| `GET /api/knox/apps/:package` | Bearer; `{app, devices}` (in-scope devices with version, managed, freshness, `uninstallRequested`); 400 bad package, 404 when no in-scope device has it |
+| `POST /api/knox/apps/:package/uninstall` | write; `{deviceIds}`; per device: in scope with write access, Android, installed, not a system app; `{results: [{deviceId, ok, error?}]}`; one `device.app.uninstall` audit row per device |
+| `GET /api/knox/app-categories` | Bearer; `{categories: [{id, name, appCount}]}` |
+| `POST /api/admin/app-categories`, `PUT`, `DELETE /api/admin/app-categories/:id` | admin; `{name}` (1-100 bytes, `System` reserved, unique: 409); delete removes the mappings; 201 / 200 / 204 |
+| `PUT /api/admin/apps/:package/category` | admin; `{categoryId}` (null clears); 204 |
 | `GET /api/knox/devices/:id/location?days=1\|7\|30` | write or admin only (read users get 404, as for an out-of-scope device); default 7, other values 400; `{current, history, days, showMap, fetchedAt, cached}` (`showMap` is the live general setting, never cached); cached per window; every response audited `device.location.view` `{days, cached}` |
 | `GET /api/knox/groups`, `GET /api/knox/groups/:id` | Bearer; all groups for every role, including member counts |
 | `POST /api/knox/groups`, `DELETE /api/knox/groups/:id` | admin only |
@@ -308,7 +352,7 @@ string or body).
 | `POST /api/admin/settings/knox/test` | admin; same body as PUT, saves nothing; `{ok, stage?, message}` where stage is `token` or `api` |
 | `GET`, `PUT /api/admin/settings/ad` | admin; view (`bindPasswordSet`) / save and apply live |
 | `POST /api/admin/settings/ad/test` | admin; `{username, password, settings?}` signs in against the given (else stored) settings; `{ok, displayName, groups, role, orgCode, access}` or `{ok:false, code, message}`; saves nothing |
-| `GET`, `PUT /api/admin/settings/general` | admin; `{installationName, syncIntervalMinutes, checkUpdates, showMap}` |
+| `GET`, `PUT /api/admin/settings/general` | admin; `{installationName, syncIntervalMinutes, checkUpdates, showMap, appInventoryHours, appReportDaily}` |
 | `POST /api/admin/sync` | admin; starts a sync in the background, 202 `{id, alreadyRunning}`; 503 `knox_not_configured`; audited `admin.sync.start` |
 | `GET /api/admin/sync` | admin; `{running, runId?, runs}` with the last 10 runs (`id`, `trigger`, `startedAt`, `finishedAt`, `status`, `error`, `counts`) |
 | any other `/api/*` | 404 JSON |
@@ -381,13 +425,16 @@ and last name and derives the display name from them until the display name is e
 | `/users/[id]` | user screen: details incl. last invited, groups, devices; edit, invite, delete |
 | `/devices` | device list with search and a freshness badge per device |
 | `/devices/[id]` | device detail: live info and profiles, applications (filterable), location with 1/7/30-day history on an embedded Leaflet map (hidden when `showMap` is off or there are no points) plus a coordinates table and OpenStreetMap links (admin and write users); "as of" note when served from cache |
+| `/apps` | installed apps grouped by category with device counts, search, category filter, show-system toggle (every role, scoped) |
+| `/apps/[package]` | one app: its devices, select and uninstall (write), category assignment (admin) |
 | `/groups` | group list |
 | `/groups/[id]` | group members |
 | `/setup` | first-run wizard: code, admin, Knox (skippable), done |
 | `/admin` | app accounts and audit log (admin only) |
 | `/admin/settings/knox` | Knox connection form with Test and Save (admin only) |
 | `/admin/settings/ad` | Active Directory settings, group mappings, test sign-in (admin only) |
-| `/admin/settings/general` | installation name and sync interval (admin only) |
+| `/admin/settings/general` | installation name, sync interval, app refresh interval and daily report toggle (admin only) |
+| `/admin/settings/apps` | app categories: add, rename, delete (admin only) |
 
 While Knox is not connected the Knox pages show a "Knox is not connected" notice (`KnoxOffline`)
 with a link to the Knox settings for admins.
@@ -510,3 +557,10 @@ Releasing: `git tag vX.Y.Z && git push --tags`
 - `knox.GroupQuery.WithCounts` sends `needDeviceUserCount=yes`; the sync fetches groups with it and `Mirror.ReplaceAll` stores the counts. Group JSON reuses the Knox names `assignAppCount` / `assignProfileCount`.
 - `knoxmock` returns them (seeded groups 5/3 and 2/1, new groups 0) only when `needDeviceUserCount=yes`.
 - Pending: web summary showing the counts.
+
+## M13: app inventory
+
+- Migration `0009_app_inventory.sql`; `db.Apps`; `knox.UninstallApp`, `SyncInstalledAppList` and the richer `DeviceApp`; `sync.Inventory`; `api/apps.go`; `knoxmock` app commands.
+- Web: Apps nav (all roles), `/apps`, `/apps/[package]`, `/admin/settings/apps`, the device Applications tab reading the mirror, two General settings.
+- Final pass (2026-10-13, see QUESTIONS.md): migration `0010_app_inventory_fixes.sql` (`device_apps.mandatory`, seed mappings, drops `apps` cache rows); `knox.IsEnrolled`; `protectedReason` and 403 `app_protected`; `Other` built-in (400 `category_builtin`); absent `appInventoryHours`/`appReportDaily` keep stored values; JSON 404 for unknown `/api/*` (`web_test.go`); Apps list with one header row.
+- Removed: the live `GET /devices/:id/apps` path (`appView`, `appsPayload`, `knox_device_cache` kind `apps`) and `getDeviceApps`/`DeviceApp` in `devices.ts`. Old `apps` cache rows are unused.

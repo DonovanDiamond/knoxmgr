@@ -431,12 +431,45 @@ func TestADAndGeneralEndpoints(t *testing.T) {
 			t.Fatalf("%s: status %d", body, resp.StatusCode)
 		}
 	}
-	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"Acme Corp","syncIntervalMinutes":30}`, a); resp.StatusCode != 200 {
+	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"Acme Corp","syncIntervalMinutes":30,"appInventoryHours":6}`, a); resp.StatusCode != 200 {
 		t.Fatalf("PUT general: %d", resp.StatusCode)
 	}
 	var h map[string]any
 	decode(t, do(t, e.app, "GET", "/api/health", "", ""), &h)
 	if h["name"] != "Acme Corp" {
 		t.Fatalf("health name not live: %v", h)
+	}
+}
+
+func TestGeneralPutAbsentKeepsStored(t *testing.T) {
+	e := newEnv(t)
+	a := e.token(t, "root")
+	put := func(body string) map[string]any {
+		t.Helper()
+		if resp := do(t, e.app, "PUT", "/api/admin/settings/general", body, a); resp.StatusCode != 200 {
+			t.Fatalf("%s: status %d", body, resp.StatusCode)
+		}
+		var got map[string]any
+		decode(t, do(t, e.app, "GET", "/api/admin/settings/general", "", a), &got)
+		return got
+	}
+	put(`{"installationName":"x","syncIntervalMinutes":15,"appInventoryHours":12,"appReportDaily":false}`)
+	for _, c := range []struct {
+		name, body string
+		hours      float64
+		daily      bool
+	}{
+		{"both absent keep", `{"installationName":"x","syncIntervalMinutes":20}`, 12, false},
+		{"hours present", `{"installationName":"x","syncIntervalMinutes":20,"appInventoryHours":24}`, 24, false},
+		{"daily present, hours absent", `{"installationName":"x","syncIntervalMinutes":20,"appReportDaily":true}`, 24, true},
+	} {
+		if got := put(c.body); got["appInventoryHours"] != c.hours || got["appReportDaily"] != c.daily {
+			t.Errorf("%s: %v", c.name, got)
+		}
+	}
+	for _, body := range []string{`{"installationName":"x","syncIntervalMinutes":20,"appInventoryHours":0}`, `{"installationName":"x","syncIntervalMinutes":20,"appInventoryHours":169}`} {
+		if resp := do(t, e.app, "PUT", "/api/admin/settings/general", body, a); resp.StatusCode != 400 {
+			t.Errorf("%s: status %d", body, resp.StatusCode)
+		}
 	}
 }

@@ -12,8 +12,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+var staticExt = map[string]bool{".js": true, ".css": true, ".map": true, ".png": true, ".jpg": true, ".svg": true,
+	".ico": true, ".webp": true, ".woff": true, ".woff2": true, ".json": true, ".webmanifest": true, ".txt": true}
+
 // serveWeb serves the embedded UI. Unknown extension-less paths get index.html so the SPA router
-// can handle them; a missing file with an extension is a real 404.
+// can handle them; a missing /_app/ path or static-asset extension is a real 404. Other dotted
+// paths (e.g. /apps/com.facebook.katana) are SPA deep links.
 func (s *server) serveWeb(c fiber.Ctx) error {
 	if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
 		return fiber.NewError(fiber.StatusMethodNotAllowed, "method not allowed")
@@ -24,7 +28,7 @@ func (s *server) serveWeb(c fiber.Ctx) error {
 	}
 	data, err := fs.ReadFile(s.Static, name)
 	if err != nil {
-		if path.Ext(name) != "" {
+		if strings.HasPrefix(name, "_app/") || staticExt[strings.ToLower(path.Ext(name))] {
 			return fiber.NewError(fiber.StatusNotFound, "not found")
 		}
 		name = "index.html"

@@ -27,7 +27,6 @@ func (s *server) knoxRoutes(r fiber.Router) {
 	r.Get("/devices", s.listDevices)
 	r.Get("/devices/:id", s.getDevice)
 	r.Get("/devices/:id/detail", s.deviceDetail)
-	r.Get("/devices/:id/apps", s.deviceApps)
 	r.Get("/devices/:id/location", s.deviceLocation)
 
 	r.Get("/groups", s.listGroups)

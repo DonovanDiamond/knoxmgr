@@ -30,6 +30,7 @@ type Scheduler struct {
 	knox    func() *knox.Client // nil while Knox is not configured
 	minutes func(context.Context) (int, error)
 	log     zerolog.Logger
+	synced  func(ctx context.Context, trigger string) // called after each successful run; must not block
 
 	wake    chan struct{} // Knox settings saved
 	resched chan struct{} // interval changed
@@ -46,6 +47,9 @@ func New(m *db.Mirror, k func() *knox.Client, minutes func(context.Context) (int
 	return &Scheduler{mirror: m, knox: k, minutes: minutes, log: log,
 		wake: make(chan struct{}, 1), resched: make(chan struct{}, 1), base: context.Background()}
 }
+
+// OnSynced sets a hook called after every successful run, before the next one can start. Call it before Start.
+func (s *Scheduler) OnSynced(f func(ctx context.Context, trigger string)) { s.synced = f }
 
 // Running returns the id of the run in progress, if any.
 func (s *Scheduler) Running() (int64, bool) {
@@ -76,7 +80,7 @@ func (s *Scheduler) begin(ctx context.Context, trigger string) (int64, bool, err
 	}
 	s.running, s.runID = true, id
 	s.wg.Add(1)
-	go s.run(k, id)
+	go s.run(k, id, trigger)
 	return id, false, nil
 }
 
@@ -135,7 +139,7 @@ func (s *Scheduler) interval(ctx context.Context) time.Duration {
 	return time.Duration(n) * time.Minute
 }
 
-func (s *Scheduler) run(k *knox.Client, id int64) {
+func (s *Scheduler) run(k *knox.Client, id int64, trigger string) {
 	defer s.wg.Done()
 	s.mu.Lock()
 	ctx := s.base
@@ -158,6 +162,9 @@ func (s *Scheduler) run(k *knox.Client, id int64) {
 	}
 	if err == nil {
 		s.log.Info().Int64("run", id).Int("users", counts.Users).Int("devices", counts.Devices).Msg("knox sync finished")
+		if s.synced != nil {
+			s.synced(ctx, trigger)
+		}
 	}
 	s.mu.Lock()
 	s.running = false

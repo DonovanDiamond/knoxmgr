@@ -29,7 +29,7 @@ func TestUpdateEndpoints(t *testing.T) {
 		t.Fatalf("audit = %+v, %v", entries, err)
 	}
 
-	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":15,"checkUpdates":false}`, a); resp.StatusCode != 200 {
+	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":15,"appInventoryHours":6,"checkUpdates":false}`, a); resp.StatusCode != 200 {
 		t.Fatalf("PUT general: %d", resp.StatusCode)
 	}
 	if st := do(t, e.app, "POST", "/api/admin/update/check", "", a).StatusCode; st != 409 {
@@ -41,7 +41,7 @@ func TestUpdateEndpoints(t *testing.T) {
 	}
 
 	// Omitting checkUpdates must keep it disabled.
-	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":20}`, a); resp.StatusCode != 200 {
+	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":20,"appInventoryHours":6}`, a); resp.StatusCode != 200 {
 		t.Fatalf("PUT general without checkUpdates: %d", resp.StatusCode)
 	}
 	decode(t, do(t, e.app, "GET", "/api/admin/update", "", a), &v)

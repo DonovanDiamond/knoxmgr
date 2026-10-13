@@ -409,3 +409,29 @@ replacing the earlier "no embedded map" default.
 - The API reuses Knox's `assignAppCount` / `assignProfileCount` because group JSON already reuses the `knox.Group` shape (like `userCount`), rather than inventing `appCount` / `profileCount`.
 - Content counts are ignored (out of scope).
 - The member count stays the mirror-computed `userCount`.
+
+## App inventory (M13)
+
+Decided 2026-10-13, while the user was away (per the task brief); revisit on request.
+
+- **Mirror per-device apps (`device_apps`).** Pulled every N hours (General setting `appInventoryHours`, 1-168, default 6), 4 devices at a time. One failing device is logged and does not abort the run. Also pulled when a device's Applications tab opens and on a manual Sync now; scheduled syncs only pull when the interval is due. Why: Knox has no cross-device app query, so an Apps page needs a local copy.
+- **Daily `SyncInstalledAppList`** to enrolled Android devices makes devices report afresh. General toggle `appReportDaily`, default on. One summary audit entry per run (`sent`, `failed`), not one per device.
+- **Categories.** `System` is automatic from Knox's `systemApp`. Others are admin-managed, seeded with defaults (nine categories, 66 package mappings); an unmapped package is `Other`. No Play Store scraping: it is unofficial, brittle and would send package lists to a third party.
+- **Icons are generated monograms.** No external requests, so the CSP is unchanged.
+- **Apps nav for all roles.** Visibility goes through the central scope check (owner's org and sub-orgs); out-of-scope devices are neither listed nor counted.
+- **Uninstall is write-only, Android-only, never for system apps, and confirmed in the UI.** One Knox command and one audit row per device. The mirror row is marked "uninstall requested" until the next pull replaces it, since Knox acts asynchronously.
+- Open: the Knox spec gives no value set for `systemApp` / `isManaged` / `mandatoryApp`. They are read as Y/N (also `yes`, `true`, `1`, any case); anything else is false. Untested against a real tenant.
+- `syncedAt` on the device Applications response falls back to the global last-pull time when the device was not pulled just now (non-Android, or Knox failed).
+
+## App inventory: final decisions (M13b)
+
+Decided by the user 2026-10-13; these refine the M13 entry above.
+
+- **Uninstall is refused server-side** (403, code `app_protected`) and hidden in the UI behind a "Protected" badge for: system apps, Knox managed or mandatory apps, the "Device management" category, and built-in MDM/agent packages (`com.samsung.android.knox.kmagent`, `...containeragent`, `com.samsung.klmsagent`, prefixes `com.sds.emm.`, `com.sec.enterprise.`, `com.samsung.android.knox.`).
+- **`Other` is built-in, like `System`:** it cannot be renamed or deleted (400, code `category_builtin`). Unmapped non-system apps belong to it.
+- **Category app counts** are installed non-system packages, the same rule as the Apps list.
+- **PUT general settings:** an absent `appInventoryHours` / `appReportDaily` keeps the stored value.
+- **Seed mappings (migration 0010):** Google Meet (tachyon) and Slack (`com.Slack`) to Messaging; Authenticator and Adobe Acrobat to Productivity; Shazam and Candy Crush to Entertainment. PayPal, Uber, Bolt and Waze stay `Other`. No new categories. 0010 also adds `device_apps.mandatory` and deletes `knox_device_cache` rows of kind `apps`.
+- **"Enrolled" is defined once** in `knox.IsEnrolled` (`src/knox/enrolled.go`), used by the API and the sync.
+- **Unknown `/api/*` paths return a JSON 404** (tested in `src/api/web_test.go`), not the SPA page.
+- **Apps list layout:** one header row; no Category column when grouped by category.

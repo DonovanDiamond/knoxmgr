@@ -24,6 +24,9 @@ const (
 	codeBadParam = "1001"
 	codeNotFound = "1002"
 	codeConflict = "1003"
+	// The device-command errors reuse the spec's documented codes.
+	codeInvalidRequest = "1901013"
+	codeNotSupported   = "-208"
 )
 
 // Server is a fake Knox Manage server. Safe for concurrent use.
@@ -68,6 +71,8 @@ func New(clientID, clientSecret string, log zerolog.Logger) *Server {
 	api.HandleFunc("POST /emm/oapi/device/selectDeviceLocation", s.selectDeviceLocation)
 	api.HandleFunc("POST /emm/oapi/device/selectDeviceLocationHistory", s.selectDeviceLocationHistory)
 	api.HandleFunc("POST /emm/oapi/device/selectDevicesByUser", s.selectDevicesByUser)
+	api.HandleFunc("POST /emm/oapi/mdm/commonOTCServiceWrapper/sendDeviceControlForUninstallApp", s.uninstallApp)
+	api.HandleFunc("POST /emm/oapi/mdm/commonOTCServiceWrapper/sendDeviceControlForSyncInstalledAppList", s.syncInstalledAppList)
 	api.HandleFunc("GET /emm/oapi/org/selectList", s.orgSelectList)
 	api.HandleFunc("GET /emm/oapi/org/select", s.orgSelect)
 	api.HandleFunc("GET /emm/oapi/org/selectUsers", s.orgSelectUsers)

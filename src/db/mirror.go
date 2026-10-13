@@ -152,6 +152,9 @@ func (m *Mirror) ReplaceAll(ctx context.Context, s Snapshot, syncedAt time.Time)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM knox_device_cache WHERE device_id NOT IN (SELECT device_id FROM knox_devices)`); err != nil {
 		return fmt.Errorf("pruning device cache: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM device_apps WHERE device_id NOT IN (SELECT device_id FROM knox_devices)`); err != nil {
+		return fmt.Errorf("pruning device apps: %w", err)
+	}
 	if err := recountGroups(ctx, tx); err != nil {
 		return err
 	}

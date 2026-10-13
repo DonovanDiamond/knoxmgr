@@ -74,9 +74,9 @@ func TestDeviceAppList(t *testing.T) {
 		minTotal int
 		maxTotal int
 	}{
-		{"all apps", "dev-alice-phone", url.Values{}, -1, 8, 15},
-		{"limit", "dev-alice-phone", url.Values{"limit": {"3"}}, 3, 8, 15},
-		{"start past end", "dev-alice-phone", url.Values{"start": {"100"}}, 0, 8, 15},
+		{"all apps", "dev-alice-phone", url.Values{}, -1, 25, 40},
+		{"limit", "dev-alice-phone", url.Values{"limit": {"3"}}, 3, 25, 40},
+		{"start past end", "dev-alice-phone", url.Values{"start": {"100"}}, 0, 25, 40},
 		{"not enrolled has none", "dev-frank-phone", url.Values{}, 0, 0, 0},
 	}
 	for _, tt := range tests {

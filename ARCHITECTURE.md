@@ -6,7 +6,7 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 ## System
 
 - One Go binary, `CGO_ENABLED=0`; serves JSON under `/api` and the embedded SvelteKit SPA elsewhere.
-- Knox Manage is the source of truth; the local DB holds a mirror of its orgs, users, USER groups, memberships and devices (`knox_*` tables), plus a cache of the last live device answers (`knox_device_cache`), app accounts, refresh tokens, settings (Knox connection, AD, general; secrets encrypted), audit log.
+- Knox Manage is the source of truth; the local DB holds a mirror of its orgs, users, USER groups, memberships and devices (`knox_*` tables), plus a cache of the last live device answers (`knox_device_cache`), the per-device app inventory (`device_apps`) with admin-managed app categories, app accounts, refresh tokens, settings (Knox connection, AD, general; secrets encrypted), audit log.
 - `config.yaml` is optional and small; a data directory (`-data`, `KNOXMGR_DATA`, default `./data`) holds the SQLite file, JWT keys and `secret.key`.
 - DB: pure-Go SQLite, or Postgres. Browser talks plain HTTP to the binary; TLS is at a proxy.
 - Auth: local accounts (bcrypt) or Active Directory (bind as the user). Ed25519 JWT access token + rotating refresh cookie.
@@ -24,12 +24,12 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 | knoxmock (cmd) | `cmd/knoxmock` | runs the fake Knox server |
 | config | `src/config` | optional `config.yaml` (defaults, validation, moved-key rejection), data dir, runtime `Knox`/`AD` structs, role/access constants, `Secret` |
 | secretbox | `src/secretbox` | AES-GCM `Seal`/`Open` for stored secrets; `LoadOrCreate` the key file |
-| settings | `src/settings` | `Manager`: validate and save Knox/AD/general settings, test connections, hold the live `knox.Client`, push AD changes into `auth.Service` |
-| db | `src/db` | connection, dialect shim, migrations, all SQL (repositories, incl. `Mirror`) |
+| settings | `src/settings` | `Manager`: validate and save Knox/AD/general settings (incl. the app inventory interval and daily-report toggle), test connections, hold the live `knox.Client`, push AD changes into `auth.Service` |
+| db | `src/db` | connection, dialect shim, migrations, all SQL (repositories, incl. `Mirror` and `Apps`) |
 | auth | `src/auth` | login, passwords, JWT, keys, refresh rotation and replay detection, AD directory, group mapping, role checks, org `Scope`, login rate limiter, first-run `SetupCode` |
-| sync | `src/sync` | `Scheduler`: Knox-to-mirror sync on a schedule and on demand, one run at a time; `Start` loop, `SyncNow`, `KnoxSaved`, `Reschedule` |
-| knox | `src/knox` | typed Knox Manage client: OAuth token reuse, users, groups, orgs (cached tree), live device detail/apps/location, `knox.Error`, `Probe` (connection test) |
-| knoxmock | `src/knoxmock` | in-memory fake Knox server (OAuth + the operations knoxmgr uses) |
+| sync | `src/sync` | `Scheduler`: Knox-to-mirror sync on a schedule and on demand, one run at a time; `Start` loop, `SyncNow`, `KnoxSaved`, `Reschedule`, `OnSynced` hook. `Inventory`: per-device app pulls and the daily report request |
+| knox | `src/knox` | typed Knox Manage client: OAuth token reuse, users, groups, orgs (cached tree), live device detail/location, device app list, app commands (uninstall, report request), `knox.Error`, `Probe` (connection test) |
+| knoxmock | `src/knoxmock` | in-memory fake Knox server (OAuth + the operations knoxmgr uses, incl. the app commands) |
 | update | `src/update` | `Checker`: asks GitHub for the newest release tag and compares it with the running version; in-memory `Status`, no downloads |
 | api | `src/api` | fiber app, handlers (auth, setup, Knox, admin, settings), setup gate, middleware, audit recording, error shape, web serving |
 | web (Go) | `web/embed.go` | embeds `web/build` |
@@ -52,6 +52,7 @@ cmd/knoxmock -> knoxmock   (knoxmock imports no other internal package)
 
 - `config` imports no internal package.
 - `db` imports no internal package. `auth` imports `config` and `db`. `knox` imports `config`. `secretbox` imports none. `settings` imports `auth`, `config`, `db`, `knox` and `secretbox`. `sync` imports `db` and `knox`. `update` imports no internal package (the enabled flag arrives as a func). `api` imports `auth`, `db`, `knox`, `settings` and `update`; it sees the scheduler only through the small `api.Syncer` interface (`SyncNow`, `Running`), so it does not import `sync`. `settings` does not import `sync` either: `main` passes it callbacks with `Manager.SetHooks` (run after `SaveKnox` and `SaveGeneral`, must not block).
+- `api` sees the inventory only through the small `api.Inventory` interface (`PullDevice`, implemented by `*sync.Inventory`), like `Syncer`; `server` wires both.
 - `api` reaches Knox through the small `api.Knox` interface (implemented by `*knox.Client`), so tests can fake it. `Deps.Knox` is a `func() Knox` that returns nil while Knox is not configured, because the settings screens swap the client at run time; `main` adapts `settings.Manager.Knox()` (avoiding a typed-nil interface).
 - Only `src/server` imports everything. No package imports `cmd` or `api`.
 - Web SPA never imports Go; it calls `/api/*` only.
@@ -92,10 +93,24 @@ Error mapping (`api/auth.go` for auth, `errorHandler` in `api/api.go` for everyt
 
 Devices
 - `viewsOf` reads the page's devices with one `Mirror.DevicesOfUsers` query and batches `Audit.LatestInvites(ctx, ids)` (latest `invites.invited_at` per user id: `MAX ... GROUP BY user_id` over the indexed `invites` table, batched at 500 ids) for `listUsers`, `getUser` and `listMembers`. `summarize` groups enrolled devices (Knox status `A`, `B`, `BS`, `BA`, `BL`) per user into `devices {enrolled, lastConnection, freshness}`; `lastConnection` is the stalest enrolled device's and is absent if one never connected.
-- Live device data (`api/device_live.go`): `GET /devices/:id/detail`, `/apps`, `/location?days=` call Knox when the screen opens, after the same scope check as `getDevice`. `liveOrCached` stores each success in `knox_device_cache` (per device and kind; location per 1/7/30-day window) and, only on `knox.ErrUnreachable`, answers from that row with `cached: true` and `fetchedAt` (the SPA shows an "as of" note). Knox business errors (`knox_error`) and an unreachable Knox with nothing cached are returned as errors. This data is not part of the bulk sync; `Mirror.ReplaceAll` prunes cache rows of devices the sync dropped.
+- Live device data (`api/device_live.go`): `GET /devices/:id/detail` and `/location?days=` call Knox when the screen opens, after the same scope check as `getDevice`. `liveOrCached` stores each success in `knox_device_cache` (per device and kind; location per 1/7/30-day window) and, only on `knox.ErrUnreachable`, answers from that row with `cached: true` and `fetchedAt` (the SPA shows an "as of" note). Knox business errors (`knox_error`) and an unreachable Knox with nothing cached are returned as errors. This data is not part of the bulk sync; `Mirror.ReplaceAll` prunes cache rows of devices the sync dropped.
 - Location is for admin and write users: `canViewLocation`; read users get the same 404 as an out-of-scope device. Every location response is audited `device.location.view` `{days, cached}`. The response carries top-level `showMap` from the live general setting (not cached). The SPA draws the history on a Leaflet map (bundled by Vite, OSM tiles) when `showMap` is on and there are points, and keeps the coordinates table and OpenStreetMap link.
 - `freshnessOf` (per user): 0 enrolled `none`; never connected or over 7 days `old`; over 24h `stale`; else `fresh`. `deviceFreshness` (per device, `api/devices.go`) adds `not_enrolled` (not an enrolled status, not graded on connection) and `never` (enrolled, never connected), otherwise the same bands. `DeviceBadge` colours: `fresh` green (`badge-success`), `stale` yellow (`badge-warning`), `old` red (`badge-error`), `never`/`not_enrolled` soft grey, `none` unstyled default badge.
 - Device scope: Knox's device list has no orgCode, so the sync stores each device with its owner's org (`knox_devices.org_code`) and `listDevices` filters by it in SQL (`Mirror.Devices(orgs)`). `getDevice` and `/users/:id/devices` answer 404 when out of scope; an unassigned device has no org, so only admins see it.
+
+App inventory
+- `device_apps` (one row per device and package) mirrors Knox's installed-app lists; `app_categories` and `app_category_map` hold the admin-managed grouping; `app_inventory` (singleton) persists `last_pull_at` and `last_report_request_at`.
+- `sync.Inventory.PullDevice` replaces one device's rows (`Knox.SelectDeviceAppList`, paged; `ReplaceDeviceApps` in one transaction, which also clears the uninstall-requested mark). `PullAll` runs it over enrolled devices with 4 workers, one run at a time; a failing device is logged and counted, never aborts the run, and the last-pull time is stored at the end.
+- When pulls run: `Inventory.Start` checks every minute and pulls when `appInventoryHours` (General setting, 1-168, default 6) have passed since the persisted `last_pull_at`, so a restart does not repeat work. The scheduler's `OnSynced` hook calls `AfterSync(trigger)` after each successful mirror sync (in a goroutine): `manual` (Sync now) always pulls, other triggers only when due. `GET /devices/:id/apps` pulls that device first (Android only); if Knox fails it answers from the mirror with `stale: true`.
+- Daily report request: when `appReportDaily` is on (default), `Start` asks each enrolled Android device to report again (`Knox.SyncInstalledAppList`) once per 24h, writing one `device.apps.report_request` audit row (`sent`/`failed` counts, actor `system`). The refreshed lists arrive with the next pull.
+- Categories resolve in SQL: `System` when Knox's `systemApp` is set, else the mapped category, else `Other`. Package names are validated with `knox.ValidPackage` before use.
+- Scope: `Apps` queries join `device_apps` to `knox_devices` and the owner `knox_users` and filter by the caller's org codes (`scopeOrgs`, same rule as devices; unassigned devices are admin-only). `GET /apps` counts only in-scope devices; `GET /apps/:package` is 404 when none is in scope.
+- Uninstall (`POST /apps/:package/uninstall`, write): per device id, re-check device scope and `Scope.CheckWriteOrg`, Android only, app present and not a system app, then one Knox `UninstallApp` call, `MarkUninstallRequested` on the mirror row (cleared by the next pull) and one `device.app.uninstall` audit row. Each device gets its own result; one failure does not stop the others.
+- Protection: `protectedReason` (`src/api/apps.go`) names why an app cannot be uninstalled (system, Knox managed or mandatory, `Device management` category, built-in MDM packages and prefixes); the uninstall route answers 403 `app_protected` and the UI shows a "Protected" badge instead of the button.
+- `Other` is built-in like `System` (rename/delete is 400 `category_builtin`). Category app counts use the Apps list rule (installed, non-system).
+- "Enrolled" is `knox.IsEnrolled` (`src/knox/enrolled.go`), shared by the API and the sync. Unknown `/api/*` paths return a JSON 404 rather than the SPA fallback.
+- Admin only: category create/rename/delete and `PUT /apps/:package/category` (audited `app.category.*`).
+- Icons are monograms drawn in the browser (`AppIcon`); no icon or store request is made, so the CSP is unchanged.
 
 Version and update check
 - `main.version` (default `dev`) is set with `-ldflags -X main.version=$(VERSION)` (Makefile `VERSION` from `git describe`; Dockerfile `ARG VERSION`). `/api/health` returns it as `version`; the shell shows it.
@@ -110,7 +125,7 @@ Cross-site and headers
 - `api.New` builds the `Content-Security-Policy` once: `script-src 'self'` plus a sha256 hash of each inline `<script>` in the embedded `index.html`; it is sent on `.html` responses only. `img-src` also allows `https://tile.openstreetmap.org` for the location map.
 
 Web serving
-- Non-`/api` GET/HEAD -> embedded file; missing extension-less path -> `index.html`; missing path with extension -> 404; other methods -> 405.
+- Non-`/api` GET/HEAD -> embedded file; missing path -> `index.html` (so dotted SPA paths like `/apps/com.x.y` work) except under `/_app/` or with a known static-asset extension -> 404; other methods -> 405.
 
 First-run setup
 1. Start-up finds no admin (`Users.CountAdmins` = 0), creates an `auth.SetupCode` and logs it (`first-run setup code`, field `setupCode`). It lives in memory only.

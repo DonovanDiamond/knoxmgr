@@ -24,6 +24,8 @@
 	let interval = $state('15');
 	let checkUpdates = $state(true);
 	let showMap = $state(true);
+	let appHours = $state('24');
+	let appReportDaily = $state(true);
 	let errors = $state<Record<string, string>>({});
 	let formError = $state('');
 	let saving = $state(false);
@@ -115,12 +117,14 @@
 		const v: Record<string, string> = {};
 		if (!installationName.trim()) v.name = 'Enter a name';
 		if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) v.interval = 'Enter a whole number from 1 to 1440';
+		const hours = Number(appHours);
+		if (!Number.isInteger(hours) || hours < 1 || hours > 168) v.appHours = 'Enter a whole number from 1 to 168';
 		errors = v;
 		if (Object.keys(v).length) return;
 		saving = true;
 		formError = '';
 		try {
-			const s = await saveGeneralSettings({ installationName: installationName.trim(), syncIntervalMinutes: minutes, checkUpdates, showMap });
+			const s = await saveGeneralSettings({ installationName: installationName.trim(), syncIntervalMinutes: minutes, checkUpdates, showMap, appInventoryHours: hours, appReportDaily });
 			installationName = s.installationName;
 			interval = String(s.syncIntervalMinutes);
 			checkUpdates = s.checkUpdates;
@@ -171,6 +175,18 @@
 				Map tiles are loaded by the viewer's browser from OpenStreetMap, which sees the viewer's IP address and the approximate area being viewed.
 			</p>
 		</div>
+		<Field
+			id="g-app-hours"
+			label="App inventory interval (hours)"
+			bind:value={appHours}
+			inputmode="numeric"
+			error={errors.appHours ?? ''}
+			hint="1 to 168. How often installed apps are refreshed from Knox."
+		/>
+		<label class="flex min-h-11 items-center gap-3">
+			<input type="checkbox" class="toggle toggle-primary" bind:checked={appReportDaily} />
+			<span>Ask devices to report installed apps daily</span>
+		</label>
 		{#if formError}<p class="err" role="alert">{formError}</p>{/if}
 		<div class="mt-2 flex sm:justify-end">
 			<button type="submit" class="btn btn-primary w-full sm:w-auto" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>

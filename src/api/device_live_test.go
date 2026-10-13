@@ -21,11 +21,6 @@ func (k *liveKnox) SelectDeviceDetail(context.Context, string) (knox.DeviceDetai
 	return knox.DeviceDetail{DeviceModelKind: "Galaxy", IsRooting: "N", Profiles: []string{"p1"}, Created: "2024-12-03T22:30:01Z"}, k.err
 }
 
-func (k *liveKnox) SelectDeviceAppList(context.Context, string) ([]knox.DeviceApp, error) {
-	k.calls++
-	return []knox.DeviceApp{{AppName: "Mail", PackageName: "com.mail", VersionName: "1"}}, k.err
-}
-
 func (k *liveKnox) SelectDeviceLocation(context.Context, string) (knox.DeviceLocation, error) {
 	k.calls++
 	return knox.DeviceLocation{Latitude: "10.5", Longitude: "20.5", Altitude: "null", Updated: "2024-05-19T21:41:33Z"}, k.err
@@ -101,7 +96,7 @@ func TestDeviceDetailContract(t *testing.T) {
 }
 
 func TestDeviceCacheFallback(t *testing.T) {
-	for _, suffix := range []string{"detail", "apps", "location"} {
+	for _, suffix := range []string{"detail", "location"} {
 		tests := []struct {
 			name      string
 			warm      bool
@@ -182,7 +177,7 @@ func TestDeviceLocation(t *testing.T) {
 		t.Fatalf("showMap default: %+v", got)
 	}
 	// The live setting wins over anything cached, so turning it off shows on the next response.
-	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":15,"showMap":false}`, e.token(t, "root")); resp.StatusCode != 200 {
+	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":15,"appInventoryHours":6,"showMap":false}`, e.token(t, "root")); resp.StatusCode != 200 {
 		t.Fatalf("PUT general: %d", resp.StatusCode)
 	}
 	got.ShowMap = true

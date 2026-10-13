@@ -129,7 +129,7 @@
 	<Note tone="warn" icon="lock"><strong>Admins only.</strong> Managing app accounts and viewing the audit log needs an administrator account.</Note>
 {:else}
 	<ul class="mb-6">
-		{#each [{ href: '/admin/settings/knox', label: 'Knox connection', sub: 'Region, credentials and test' }, { href: '/admin/settings/ad', label: 'Active Directory', sub: 'Sign-in and group mappings' }, { href: '/admin/settings/general', label: 'General', sub: 'Installation name and sync interval' }] as l (l.href)}
+		{#each [{ href: '/admin/settings/knox', label: 'Knox connection', sub: 'Region, credentials and test' }, { href: '/admin/settings/ad', label: 'Active Directory', sub: 'Sign-in and group mappings' }, { href: '/admin/settings/general', label: 'General', sub: 'Installation name and sync interval' }, { href: '/admin/settings/apps', label: 'App categories', sub: 'Group installed apps on devices' }] as l (l.href)}
 			<li class="row row-hover">
 				<a href={l.href} class="rowmain">
 					<span class="nm">{l.label}</span>

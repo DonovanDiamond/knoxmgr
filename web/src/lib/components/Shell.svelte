@@ -31,6 +31,7 @@
 	const tabs = $derived<{ href: string; label: string; icon: IconName }[]>([
 		{ href: '/users', label: 'Users', icon: 'users' },
 		{ href: '/devices', label: 'Devices', icon: 'device' },
+		{ href: '/apps', label: 'Apps', icon: 'apps' },
 		{ href: '/groups', label: 'Groups', icon: 'groups' },
 		...(session.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin', icon: 'admin' as const }] : [])
 	]);

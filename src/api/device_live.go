@@ -123,39 +123,6 @@ func (s *server) deviceDetail(c fiber.Ctx) error {
 	return c.JSON(detailResponse{detailPayload: p, FetchedAt: at.Format(time.RFC3339), Cached: cached, CanViewLocation: canViewLocation(c)})
 }
 
-type appView struct {
-	Name        string `json:"name"`
-	PackageName string `json:"packageName"`
-	Version     string `json:"version,omitempty"`
-}
-
-type appsPayload struct {
-	Apps []appView `json:"apps"`
-}
-
-func (s *server) deviceApps(c fiber.Ctx) error {
-	d, err := s.inScopeDevice(c)
-	if err != nil {
-		return err
-	}
-	p := appsPayload{Apps: []appView{}}
-	at, cached, err := s.liveOrCached(c.Context(), d.DeviceID, "apps", &p, func() error {
-		apps, err := s.Knox().SelectDeviceAppList(c.Context(), d.DeviceID)
-		if err != nil {
-			return err
-		}
-		p.Apps = make([]appView, len(apps))
-		for i, a := range apps {
-			p.Apps[i] = appView{Name: a.AppName, PackageName: a.PackageName, Version: a.VersionName}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return c.JSON(fiber.Map{"apps": p.Apps, "fetchedAt": at.Format(time.RFC3339), "cached": cached})
-}
-
 type locationPoint struct {
 	Time      string   `json:"time"`
 	Latitude  float64  `json:"latitude"`

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/DonovanDiamond/knoxmgr/src/auth"
 	"github.com/DonovanDiamond/knoxmgr/src/db"
 	"github.com/DonovanDiamond/knoxmgr/src/knox"
 )
@@ -86,12 +87,6 @@ var (
 	platformText = map[string]string{"A": "Android", "I": "iOS", "W": "Windows"}
 )
 
-// isEnrolled: provisioned and deactivated devices are not enrolled; blocked ones still are.
-func isEnrolled(status string) bool {
-	_, known := statusText[status]
-	return known && status != "I" && status != "P"
-}
-
 func parseConnection(s string) time.Time {
 	t, _ := time.Parse(time.RFC3339, s)
 	return t
@@ -100,7 +95,7 @@ func parseConnection(s string) time.Time {
 // viewOfDevice renders d; orgCode and userName fill what the Knox list shape lacks.
 func viewOfDevice(d knox.Device, orgCode, userName string, now time.Time) deviceView {
 	last := parseConnection(d.LastConnection)
-	enrolled := isEnrolled(d.DeviceStatus)
+	enrolled := knox.IsEnrolled(d.DeviceStatus)
 	v := deviceView{
 		DeviceID: d.DeviceID, ModelName: d.DeviceModelKind, OS: platformText[d.Platform], OSVersion: d.DeviceVersionName,
 		Status: statusText[d.DeviceStatus], Enrolled: enrolled, UserID: d.UserID, UserName: userName, OrgCode: orgCode,
@@ -124,7 +119,7 @@ func summarize(devices []knox.Device, now time.Time) map[string]deviceSummary {
 	}
 	by := map[string]*acc{}
 	for _, d := range devices {
-		if d.UserID == "" || !isEnrolled(d.DeviceStatus) {
+		if d.UserID == "" || !knox.IsEnrolled(d.DeviceStatus) {
 			continue
 		}
 		a := by[d.UserID]
@@ -191,6 +186,11 @@ func (s *server) inScopeDevice(c fiber.Ctx) (knox.Device, error) {
 	if err != nil {
 		return knox.Device{}, err
 	}
+	return s.scopedDevice(c, sc, id)
+}
+
+// scopedDevice loads a device for sc. Out of scope looks like absent.
+func (s *server) scopedDevice(c fiber.Ctx, sc auth.Scope, id string) (knox.Device, error) {
 	md, err := s.Mirror.Device(c.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		return knox.Device{}, errDeviceNotFound

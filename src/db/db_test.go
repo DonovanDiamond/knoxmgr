@@ -52,7 +52,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 8 {
+	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 10 {
 		t.Fatalf("schema_migrations rows = %d, %v", n, err)
 	}
 }
@@ -532,7 +532,7 @@ func TestAppSettingsDefaults(t *testing.T) {
 		t.Fatalf("ad defaults = %+v, %v", a, err)
 	}
 	g, err := r.GetGeneral(ctx)
-	if err != nil || g != (GeneralSettings{InstallationName: "knoxmgr", SyncIntervalMinutes: 15, CheckUpdates: true, ShowMap: true}) {
+	if err != nil || g != (GeneralSettings{InstallationName: "knoxmgr", SyncIntervalMinutes: 15, CheckUpdates: true, ShowMap: true, AppInventoryHours: 6, AppReportDaily: true}) {
 		t.Fatalf("general defaults = %+v, %v", g, err)
 	}
 }
@@ -570,7 +570,7 @@ func TestAppSettingsRoundTripAndAudit(t *testing.T) {
 		t.Fatalf("mapping order lost: %+v", got.Mappings)
 	}
 
-	if err := r.SaveGeneral(ctx, GeneralSettings{InstallationName: "Acme", SyncIntervalMinutes: 30, CheckUpdates: false, ShowMap: false}, nil, "root"); err != nil {
+	if err := r.SaveGeneral(ctx, GeneralSettings{InstallationName: "Acme", SyncIntervalMinutes: 30, CheckUpdates: false, ShowMap: false, AppInventoryHours: 12}, nil, "root"); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := r.GetGeneral(ctx); got.InstallationName != "Acme" || got.SyncIntervalMinutes != 30 || got.CheckUpdates || got.ShowMap {
@@ -616,10 +616,10 @@ func TestAppSettingsConstraints(t *testing.T) {
 		run  func() error
 	}{
 		{"interval zero", func() error {
-			return r.SaveGeneral(ctx, GeneralSettings{InstallationName: "x", SyncIntervalMinutes: 0}, nil, "r")
+			return r.SaveGeneral(ctx, GeneralSettings{InstallationName: "x", SyncIntervalMinutes: 0, AppInventoryHours: 6}, nil, "r")
 		}},
 		{"interval too big", func() error {
-			return r.SaveGeneral(ctx, GeneralSettings{InstallationName: "x", SyncIntervalMinutes: 1441}, nil, "r")
+			return r.SaveGeneral(ctx, GeneralSettings{InstallationName: "x", SyncIntervalMinutes: 1441, AppInventoryHours: 6}, nil, "r")
 		}},
 		{"bad mapping role", func() error {
 			return r.SaveAD(ctx, ADSettings{Mappings: []ADMapping{{"g", "root", "", ""}}}, false, nil, "r")

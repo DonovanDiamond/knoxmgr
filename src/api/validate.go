@@ -67,14 +67,17 @@ func checkEmail(v string, required bool) error {
 }
 
 // checkIDList validates a non-empty, bounded, de-duplicated list of Knox user ids.
-func checkIDList(ids []string) ([]string, error) {
+func checkIDList(ids []string) ([]string, error) { return checkNamedIDs("userId", ids) }
+
+// checkNamedIDs is checkIDList for any Knox id kind; field is the singular JSON name.
+func checkNamedIDs(field string, ids []string) ([]string, error) {
 	if len(ids) == 0 || len(ids) > maxBatchIDs {
-		return nil, badRequest("userIds must hold 1 to 100 ids")
+		return nil, badRequest(field + "s must hold 1 to 100 ids")
 	}
 	seen := make(map[string]bool, len(ids))
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if err := checkPattern(knoxIDRe, "userId", id); err != nil {
+		if err := checkPattern(knoxIDRe, field, id); err != nil {
 			return nil, err
 		}
 		if !seen[id] {

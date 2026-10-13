@@ -84,6 +84,54 @@ func (s *Server) selectDeviceAppList(w http.ResponseWriter, r *http.Request) {
 	ok(w, map[string]any{"total": strconv.Itoa(len(apps)), "devicelist": window(apps, start, limit)})
 }
 
+// androidDevice is knownDevice plus the "runs on Android" rule of the app commands. Caller holds
+// s.mu on return when d is non-nil.
+func (s *Server) androidDevice(w http.ResponseWriter, r *http.Request) *device {
+	d := s.knownDevice(w, r)
+	if d != nil && d.Platform != "A" {
+		s.mu.Unlock()
+		fail(w, codeNotSupported, "not supported platform")
+		return nil
+	}
+	return d
+}
+
+func (s *Server) uninstallApp(w http.ResponseWriter, r *http.Request) {
+	pkg := r.FormValue("appPackage")
+	if pkg == "" || len(pkg) > 255 {
+		fail(w, codeBadParam, "appPackage is required")
+		return
+	}
+	d := s.androidDevice(w, r)
+	if d == nil {
+		return
+	}
+	defer s.mu.Unlock()
+	apps := deviceApps(d)
+	for i, a := range apps {
+		if a["packageName"] != pkg {
+			continue
+		}
+		if a["systemApp"] == "Y" {
+			fail(w, codeInvalidRequest, "system apps cannot be uninstalled")
+			return
+		}
+		d.apps = append(apps[:i:i], apps[i+1:]...)
+		ok(w, nil)
+		return
+	}
+	fail(w, codeNotFound, "application not installed")
+}
+
+func (s *Server) syncInstalledAppList(w http.ResponseWriter, r *http.Request) {
+	d := s.androidDevice(w, r)
+	if d == nil {
+		return
+	}
+	s.mu.Unlock()
+	ok(w, nil)
+}
+
 func (s *Server) selectDeviceLocation(w http.ResponseWriter, r *http.Request) {
 	d := s.knownDevice(w, r)
 	if d == nil {

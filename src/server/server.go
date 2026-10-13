@@ -93,10 +93,14 @@ func Run(ctx context.Context, log zerolog.Logger, o Options) error {
 		g, err := mgr.GetGeneral(ctx)
 		return g.SyncIntervalMinutes, err
 	}, log)
+	apps := db.NewApps(conn)
+	inventory := sync.NewInventory(mirror, apps, audit, mgr.Knox, mgr.AppInventoryHours, mgr.AppReportDaily, log)
+	syncer.OnSynced(func(ctx context.Context, trigger string) { go inventory.AfterSync(ctx, trigger) })
 	// KNOXMGR_TEST_GITHUB_API points the checker at a fake GitHub for screenshots; unset in production.
 	checker := update.New(o.Version, os.Getenv("KNOXMGR_TEST_GITHUB_API"), mgr.CheckUpdates, log)
 	mgr.SetHooks(syncer.KnoxSaved, func() { syncer.Reschedule(); checker.Wake() })
 	go syncer.Start(ctx)
+	go inventory.Start(ctx)
 	go checker.Start(ctx)
 
 	var setup *auth.SetupCode
@@ -116,7 +120,7 @@ func Run(ctx context.Context, log zerolog.Logger, o Options) error {
 		return err
 	}
 	app := api.New(api.Deps{
-		Log: log, Auth: svc, Users: users, Audit: audit, Settings: mgr, Setup: setup, Mirror: mirror, Sync: syncer, Update: checker, Version: o.Version,
+		Log: log, Auth: svc, Users: users, Audit: audit, Settings: mgr, Setup: setup, Mirror: mirror, Sync: syncer, Apps: apps, Inventory: inventory, Update: checker, Version: o.Version,
 		Knox: func() api.Knox {
 			if c := mgr.Knox(); c != nil { // a nil *Client must not become a non-nil interface
 				return c

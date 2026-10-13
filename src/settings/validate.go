@@ -210,6 +210,9 @@ func (in *GeneralInput) normalise() error {
 	if in.SyncIntervalMinutes < 1 || in.SyncIntervalMinutes > 1440 {
 		return invalid("syncIntervalMinutes must be 1 to 1440")
 	}
+	if in.AppInventoryHours != nil && (*in.AppInventoryHours < 1 || *in.AppInventoryHours > 168) {
+		return invalid("appInventoryHours must be 1 to 168")
+	}
 	return nil
 }
 
@@ -217,6 +220,8 @@ func (in *GeneralInput) normalise() error {
 type GeneralInput struct {
 	InstallationName    string `json:"installationName"`
 	SyncIntervalMinutes int    `json:"syncIntervalMinutes"`
-	CheckUpdates        *bool  `json:"checkUpdates"` // nil keeps the current value
-	ShowMap             *bool  `json:"showMap"`      // nil keeps the current value
+	CheckUpdates        *bool  `json:"checkUpdates"`      // nil keeps the current value
+	ShowMap             *bool  `json:"showMap"`           // nil keeps the current value
+	AppInventoryHours   *int   `json:"appInventoryHours"` // nil keeps the current value
+	AppReportDaily      *bool  `json:"appReportDaily"`    // nil keeps the current value
 }

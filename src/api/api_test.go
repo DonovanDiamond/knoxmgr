@@ -104,6 +104,14 @@ func seedMirror(t *testing.T, k *knox.Client, m *db.Mirror) {
 	}
 }
 
+// fakeInventory stands in for the Knox inventory pull; it records calls and can fail.
+type fakeInventory struct {
+	err   error
+	calls int
+}
+
+func (f *fakeInventory) PullDevice(context.Context, string) error { f.calls++; return f.err }
+
 type env struct {
 	app   *fiber.App
 	svc   *auth.Service
@@ -116,6 +124,8 @@ type env struct {
 	// mirror is seeded from the Knox mock; sync is the fake behind the admin sync endpoints.
 	mirror *db.Mirror
 	sync   *fakeSyncer
+	apps   *db.Apps
+	inv    *fakeInventory
 }
 
 func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
@@ -186,11 +196,12 @@ func newEnvWith(t *testing.T, tweak func(*Deps)) *env {
 	mirror := db.NewMirror(d)
 	seedMirror(t, mgr.Knox(), mirror)
 	syncer := &fakeSyncer{}
+	apps, inv := db.NewApps(d), &fakeInventory{}
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"tag_name":"v0.5.0"}`))
 	}))
 	t.Cleanup(gh.Close)
-	deps := Deps{Log: zerolog.Nop(), Version: "v0.4.0", Update: update.New("v0.4.0", gh.URL, mgr.CheckUpdates, zerolog.Nop()), Auth: svc, Users: users, Audit: audit, Settings: mgr, Mirror: mirror, Sync: syncer,
+	deps := Deps{Log: zerolog.Nop(), Version: "v0.4.0", Update: update.New("v0.4.0", gh.URL, mgr.CheckUpdates, zerolog.Nop()), Auth: svc, Users: users, Audit: audit, Settings: mgr, Mirror: mirror, Apps: apps, Inventory: inv, Sync: syncer,
 		Knox: func() Knox {
 			if c := mgr.Knox(); c != nil {
 				return c
@@ -202,7 +213,7 @@ func newEnvWith(t *testing.T, tweak func(*Deps)) *env {
 		tweak(&deps)
 	}
 	app := New(deps)
-	return &env{app: app, svc: svc, dir: dir, users: users, audit: audit, mgr: mgr, mock: mock, db: d, mirror: mirror, sync: syncer}
+	return &env{app: app, svc: svc, dir: dir, users: users, audit: audit, mgr: mgr, mock: mock, db: d, mirror: mirror, sync: syncer, apps: apps, inv: inv}
 }
 
 func do(t *testing.T, app *fiber.App, method, path, body, bearer string, cookies ...*http.Cookie) *http.Response {
@@ -434,6 +445,10 @@ func TestWebAndNotFound(t *testing.T) {
 		{"nested spa route", "GET", "/users/12/edit", 200, "spa"},
 		{"asset", "GET", "/_app/immutable/a.js", 200, "console.log"},
 		{"missing asset", "GET", "/_app/missing.js", 404, ""},
+		{"dotted spa deep link", "GET", "/apps/com.facebook.katana", 200, "spa"},
+		{"missing css", "GET", "/missing.css", 404, ""},
+		{"missing upper-case png", "GET", "/logo.PNG", 404, ""},
+		{"missing under _app without ext-match", "GET", "/_app/x.y", 404, ""},
 		{"unknown api", "GET", "/api/nope", 404, `"error"`},
 		{"unknown api nested", "POST", "/api/auth/nope/x", 404, `"error"`},
 		{"traversal", "GET", "/../../etc/passwd", 200, "spa"},

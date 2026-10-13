@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,12 +31,31 @@ type DeviceDetail struct {
 	LastConnection string `json:"stdFormatLastConnectionDate"`
 }
 
-// DeviceApp is one installed application.
+// DeviceApp is one installed application. The spec types systemApp, isManaged and mandatoryApp
+// as plain strings without listing values, so read them through System, Managed and Mandatory.
 type DeviceApp struct {
-	AppName     string `json:"appName"`
-	PackageName string `json:"packageName"`
-	VersionName string `json:"versionName"`
+	AppName      string `json:"appName"`
+	PackageName  string `json:"packageName"`
+	VersionName  string `json:"versionName"`
+	SystemApp    string `json:"systemApp"`
+	IsManaged    string `json:"isManaged"`
+	MandatoryApp string `json:"mandatoryApp"`
+	Installed    string `json:"stdFormatInstalled"` // UTC ISO 8601
+	KnoxID       string `json:"knoxId"`             // empty for the default area
 }
+
+// flag reads Knox's loosely typed booleans: Y/N, true/false or 1/0.
+func flag(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "y", "yes", "true", "1":
+		return true
+	}
+	return false
+}
+
+func (a DeviceApp) System() bool    { return flag(a.SystemApp) }
+func (a DeviceApp) Managed() bool   { return flag(a.IsManaged) }
+func (a DeviceApp) Mandatory() bool { return flag(a.MandatoryApp) }
 
 // DeviceLocation is one GPS fix; Knox sends every value as a string.
 type DeviceLocation struct {
@@ -60,7 +80,13 @@ func (c *Client) SelectDeviceDetail(ctx context.Context, deviceID string) (Devic
 	return call[DeviceDetail](ctx, c, http.MethodPost, "/device/selectDeviceInfo", url.Values{"deviceId": {deviceID}})
 }
 
-// SelectDeviceAppList lists a device's applications, up to 1000 (POST /device/selectDeviceAppList).
+const (
+	appPageSize = 1000 // the spec's maximum limit
+	maxAppPages = 10   // bounds the loop if Knox keeps returning full pages
+)
+
+// SelectDeviceAppList lists all of a device's applications, paging through
+// POST /device/selectDeviceAppList.
 func (c *Client) SelectDeviceAppList(ctx context.Context, deviceID string) ([]DeviceApp, error) {
 	if err := requireDeviceID(deviceID); err != nil {
 		return nil, err
@@ -68,9 +94,19 @@ func (c *Client) SelectDeviceAppList(ctx context.Context, deviceID string) ([]De
 	type result struct {
 		Devicelist []DeviceApp `json:"devicelist"`
 	}
-	r, err := call[result](ctx, c, http.MethodPost, "/device/selectDeviceAppList",
-		url.Values{"deviceId": {deviceID}, "start": {"0"}, "limit": {"1000"}})
-	return r.Devicelist, err
+	var apps []DeviceApp
+	for page := 0; page < maxAppPages; page++ {
+		r, err := call[result](ctx, c, http.MethodPost, "/device/selectDeviceAppList",
+			url.Values{"deviceId": {deviceID}, "start": {strconv.Itoa(page * appPageSize)}, "limit": {strconv.Itoa(appPageSize)}})
+		if err != nil {
+			return nil, err
+		}
+		apps = append(apps, r.Devicelist...)
+		if len(r.Devicelist) < appPageSize {
+			break
+		}
+	}
+	return apps, nil
 }
 
 // SelectDeviceLocation fetches the device's latest GPS fix (POST /device/selectDeviceLocation).

@@ -65,6 +65,8 @@ type device struct {
 	OrgCode           string `json:"orgCode,omitempty"`
 	LastConnection    string `json:"stdFormatLastConnectionDate"`
 	lastConnected     time.Time
+	apps              []map[string]any // built on first use so uninstalls persist
+	appsReady         bool
 }
 
 type group struct {
@@ -337,34 +339,66 @@ func hexPairs(h uint32) string {
 	return fmt.Sprintf("%02x:%02x:%02x:%02x", byte(h>>24), byte(h>>16), byte(h>>8), byte(h))
 }
 
-var appCatalog = [][2]string{
-	{"Knox Manage Agent", "com.samsung.android.knox.kmagent"}, {"Chrome", "com.android.chrome"}, {"Gmail", "com.google.android.gm"},
-	{"Microsoft Teams", "com.microsoft.teams"}, {"Outlook", "com.microsoft.office.outlook"}, {"Google Maps", "com.google.android.apps.maps"},
-	{"Samsung Internet", "com.sec.android.app.sbrowser"}, {"Calendar", "com.samsung.android.calendar"}, {"WhatsApp", "com.whatsapp"},
-	{"Zoom", "us.zoom.videomeetings"}, {"Adobe Acrobat", "com.adobe.reader"}, {"Samsung Notes", "com.samsung.android.app.notes"},
-	{"Google Drive", "com.google.android.apps.docs"}, {"Authenticator", "com.azure.authenticator"}, {"Camera", "com.sec.android.app.camera"},
+// systemCatalog and userCatalog are {name, package}. Every enrolled Android device gets the Knox
+// agent and a subset of both lists, so app counts differ per device and overlap across devices.
+var systemCatalog = [][2]string{
+	{"Settings", "com.android.settings"}, {"Phone", "com.samsung.android.dialer"}, {"Messages", "com.samsung.android.messaging"},
+	{"Contacts", "com.samsung.android.app.contacts"}, {"Camera", "com.sec.android.app.camera"}, {"Gallery", "com.sec.android.gallery3d"},
+	{"Calendar", "com.samsung.android.calendar"}, {"Samsung Notes", "com.samsung.android.app.notes"}, {"My Files", "com.sec.android.app.myfiles"},
+	{"Clock", "com.sec.android.app.clockpackage"}, {"Samsung Internet", "com.sec.android.app.sbrowser"}, {"Google Play Store", "com.android.vending"},
 }
 
-// deviceApps returns DeviceAppInfo entries: 8-15 apps for enrolled devices, none otherwise.
+const knoxAgentPackage = "com.samsung.android.knox.kmagent"
+
+var userCatalog = [][2]string{
+	{"Chrome", "com.android.chrome"}, {"Gmail", "com.google.android.gm"}, {"Microsoft Teams", "com.microsoft.teams"},
+	{"Outlook", "com.microsoft.office.outlook"}, {"Google Maps", "com.google.android.apps.maps"}, {"WhatsApp", "com.whatsapp"},
+	{"Telegram", "org.telegram.messenger"}, {"Spotify", "com.spotify.music"}, {"TikTok", "com.zhiliaoapp.musically"},
+	{"Zoom", "us.zoom.videomeetings"}, {"Adobe Acrobat", "com.adobe.reader"}, {"Google Drive", "com.google.android.apps.docs"},
+	{"Authenticator", "com.azure.authenticator"}, {"YouTube", "com.google.android.youtube"}, {"Facebook", "com.facebook.katana"},
+	{"Instagram", "com.instagram.android"}, {"X", "com.twitter.android"}, {"LinkedIn", "com.linkedin.android"},
+	{"Slack", "com.Slack"}, {"Netflix", "com.netflix.mediaclient"}, {"Uber", "com.ubercab"}, {"Google Photos", "com.google.android.apps.photos"},
+	{"Microsoft Word", "com.microsoft.office.word"}, {"Microsoft Excel", "com.microsoft.office.excel"}, {"OneDrive", "com.microsoft.skydrive"},
+	{"Dropbox", "com.dropbox.android"}, {"Waze", "com.waze"}, {"Shazam", "com.shazam.android"}, {"Candy Crush Saga", "com.king.candycrushsaga"},
+	{"Snapchat", "com.snapchat.android"}, {"PayPal", "com.paypal.android.p2pmobile"}, {"Google Meet", "com.google.android.apps.tachyon"},
+	{"Skype", "com.skype.raider"}, {"Truecaller", "com.truecaller"}, {"Bolt", "ee.mtakso.client"}, {"Discord", "com.discord"},
+}
+
+// deviceApps returns the device's DeviceAppInfo entries: 25-40 on enrolled Android devices
+// (about 12 system apps), none otherwise. The slice is shared; callers hold s.mu.
 func deviceApps(d *device) []map[string]any {
-	out := []map[string]any{}
-	if !d.enrolled() {
-		return out
+	if d.appsReady {
+		return d.apps
 	}
-	n := 8 + int(seedHash(d.DeviceID, "apps")%8)
-	off := int(seedHash(d.DeviceID, "appoff") % uint32(len(appCatalog)))
-	for i := 0; i < n; i++ {
-		a := appCatalog[(off+i)%len(appCatalog)]
+	d.appsReady = true
+	d.apps = []map[string]any{}
+	if !d.enrolled() || d.Platform != "A" {
+		return d.apps
+	}
+	add := func(a [2]string, system bool) {
 		h := seedHash(d.DeviceID, a[1])
 		installed := time.Now().UTC().Add(-time.Duration(1+h%200) * 24 * time.Hour)
-		out = append(out, map[string]any{
+		yn := map[bool]string{true: "Y", false: "N"}
+		d.apps = append(d.apps, map[string]any{
 			"deviceId": d.DeviceID, "appName": a[0], "packageName": a[1],
 			"versionName": fmt.Sprintf("%d.%d.%d", 1+h%20, h>>8%10, h>>16%100), "versionCode": strconv.Itoa(int(100000 + h%900000)),
 			"installed": installed.UnixMilli(), "stdFormatInstalled": stdTime(installed),
-			"platform": d.Platform, "systemApp": map[bool]string{true: "Y", false: "N"}[i%5 == 0], "enabled": "Y", "isRooting": "N",
+			"platform": d.Platform, "systemApp": yn[system], "isManaged": yn[a[1] == knoxAgentPackage],
+			"mandatoryApp": yn[a[1] == knoxAgentPackage], "enabled": "Y", "isRooting": "N", "knoxId": nil,
 		})
 	}
-	return out
+	add([2]string{"Knox Manage Agent", knoxAgentPackage}, false)
+	for i, a := range systemCatalog {
+		if i < 10 || seedHash(d.DeviceID, a[1])%2 == 0 {
+			add(a, true)
+		}
+	}
+	n := 12 + int(seedHash(d.DeviceID, "apps")%17)
+	off := int(seedHash(d.DeviceID, "appoff") % uint32(len(userCatalog)))
+	for i := 0; i < n; i++ {
+		add(userCatalog[(off+i)%len(userCatalog)], false)
+	}
+	return d.apps
 }
 
 // locationHistory returns points newest first, locationEvery apart, for the last `days` days.

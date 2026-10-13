@@ -4,12 +4,13 @@
 - Answer → haiku-scout. Change → sonnet-coder. Never a coder for a question.
 - Verified / reported / missing are three different things. I never present the last two as the first.
 - Nobody waits. Over budget = one check, then kill, then re-read git state before re-dispatching.
-- Never re-run a suite that passed with no change since. Last tested: v0.10.0 — full go test -count=1 ./... + npm check + windows vet (Governor-run)
+- Never re-run a suite that passed with no change since. Last tested: v0.11.0 — full go test -count=1 ./... + npm check + windows vet (Governor-run)
 ### Decisions 2026-10-12 (answered)
 - Docker via DOCKER ?= sudo docker (9b42cf0). Tag only: v0.1.0 tagged, no push/remote. HSTS host only. Postgres test: not now. Group list count: keep Knox total.
 - Badge colour = stalest enrolled device (>24h yellow, >7d red); 0 devices = grey 0 badge; display name derived from first+last but editable; coordinators see devices of in-scope users only.
 - Versioning (user, 2026-10-12): commit and tag as we go; stay on v0.X, never v1. v0.2.0 = settings/sync/polish (3a2bb2c).
 ### Governor log
+- 2026-10-13 — M13b orchestrator returned "PLACEHOLDER" while its 3 coders were still running; rejected, resumed it to finish (workers left running, not re-dispatched).
 - 2026-10-13 — region worker missed a second test enumerating regions (src/api); caught by M12, fixed in follow-up.
 - 2026-10-13 — M10 clean (6 coders, disjoint; orchestrator fixed a showMap reload bug in review).
 - 2026-10-12 — M8 polish worker recovered the mock Knox client secret of a scratchpad test data dir from an old session transcript (auto mode flagged it 'Credential Exploration'). Test-only mock credential; reported to user; future briefs: start fresh data dirs, never reuse.
@@ -58,3 +59,9 @@
     - Done: worker npm check 0/0; Governor viewed desktop shot.
     - #21/#22 done: help panel (setup + admin knox, README); group bulk remove (one DELETE with userIds list, worker-reported network line) + Delete group moved to detail panel (admin, ConfirmDelete). Governor viewed setup-help, group selection + after-remove shots. Delete group not exercised end to end. M12 (group counts backend) running.
     - #24 done: M12 backend (migration 0008, sync needDeviceUserCount=yes, fields assignAppCount/assignProfileCount) + summary on group page; region test fixed (16). Governor: full go test pass, npm check 0/0, viewed group summary shot. Tagged v0.10.0 + pushed.
+26. [x] (2026-10-13) Q: what the Knox API can/can't do for group apps/profiles, profile view/edit, app catalog. Lane 0, answered from docs/knox-api/km-api.yml v25.07 (89 paths).
+27. [x] (2026-10-13) App inventory (M13, Lane 2). User away a few hours: decide, summary at end, tag+push like normal.
+    Knox facts (Governor, spec): selectDeviceAppList gives packageName, appName, versionName, systemApp, isManaged, mandatoryApp, installed date — no category, no icon. sendDeviceControlForUninstallApp(deviceId, appPackage, knoxId) and sendDeviceControlForSyncInstalledAppList(deviceId), Android only.
+    Decisions: (a) mirror per-device app lists in DB; inventory pull every 6 h (admin-editable) + on device open + "Sync now"; (b) once a day ask enrolled Android devices to report their app list (SyncInstalledAppList; admin toggle, default on), bounded concurrency; (c) System = Knox systemApp flag; other categories: admin-managed custom categories (seeded: Social media, Messaging, Entertainment, Productivity, Browsers, Google, Samsung, Device management, Other) + built-in package→category seed for well-known apps, admin can override; no Play Store scraping; (d) icons: generated monogram tile (colour from package name) — no external requests; (e) Apps nav page: search, category filter/grouping, hide system by default, device counts in scope; app detail lists devices (in scope) with uninstall (write users, Android, non-system, confirm, audited, one command per device, select-many); (f) device Applications tab: group by category, hide system toggle, uninstall per app (same rules), "Refresh from device" button. Target v0.11.0.
+    - M13 returned (10 coders). Governor viewed apps list + device apps shots. Follow-up M13b dispatched: protect managed/mandatory/MDM apps from uninstall; Other undeletable; Other count mismatch; general PUT absent=keep; Meet mapping; orphan cache rows; shared enrolled rule; apps list single header; SPA fallback must not cover /api.
+    - M13b: manifest never arrived (Missing). Governor verified on disk: migration 0010 (Meet/Slack→Messaging, cache cleanup), knox.IsEnrolled shared, Other built-in (db guard + API 400), AppInventoryHours nil keeps value, /api unknown → JSON 404 test, Other-count test, Protected badge in UI + server. Governor: go vet + full go test -count=1 pass, npm check 0/0, windows vet ok; viewed apps list + device apps (Protected) shots. Admin categories shot not viewed. Tagged v0.11.0 + pushed.

@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	export type IconName =
-		| 'sun' | 'moon' | 'monitor' | 'users' | 'groups' | 'admin' | 'lock' | 'info' | 'check' | 'chev' | 'search' | 'back' | 'device';
+		| 'sun' | 'moon' | 'monitor' | 'users' | 'groups' | 'admin' | 'lock' | 'info' | 'check' | 'chev' | 'search' | 'back' | 'device' | 'apps';
 </script>
 
 <script lang="ts">
@@ -19,7 +19,8 @@
 		chev: '<path d="M9 5l7 7-7 7"/>',
 		search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
 		back: '<path d="M15 5l-7 7 7 7"/>',
-		device: '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>'
+		device: '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>',
+		apps: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>'
 	};
 </script>
 

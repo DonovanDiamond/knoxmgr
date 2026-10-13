@@ -10,6 +10,7 @@ import (
 	stdsync "sync"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 
 	"github.com/DonovanDiamond/knoxmgr/src/config"
@@ -21,6 +22,12 @@ import (
 // newEnv returns a scheduler wired to a fresh mock and temp SQLite. If gate is non-nil, the first
 // user listing blocks until it is closed.
 func newEnv(t *testing.T, gate chan struct{}) (*Scheduler, *db.Mirror, *knox.Client) {
+	t.Helper()
+	s, m, k, _ := newEnvDB(t, gate)
+	return s, m, k
+}
+
+func newEnvDB(t *testing.T, gate chan struct{}) (*Scheduler, *db.Mirror, *knox.Client, *sqlx.DB) {
 	t.Helper()
 	var once stdsync.Once
 	mock := knoxmock.New("cid", "secret", zerolog.Nop())
@@ -44,7 +51,7 @@ func newEnv(t *testing.T, gate chan struct{}) (*Scheduler, *db.Mirror, *knox.Cli
 		ClientSecret: "secret", AllowInsecureHTTP: true}, nil)
 	m := db.NewMirror(d)
 	s := New(m, func() *knox.Client { return k }, func(context.Context) (int, error) { return 15, nil }, zerolog.Nop())
-	return s, m, k
+	return s, m, k, d
 }
 
 func counts(t *testing.T, m *db.Mirror) db.SyncCounts {

@@ -188,6 +188,8 @@ export interface GeneralSettings {
 	syncIntervalMinutes: number;
 	checkUpdates: boolean;
 	showMap: boolean;
+	appInventoryHours: number;
+	appReportDaily: boolean;
 }
 
 export interface UpdateStatus {

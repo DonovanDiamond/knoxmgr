@@ -86,6 +86,12 @@ func (m *Manager) CheckUpdates() bool { return m.general.Load().CheckUpdates }
 // ShowMap reports whether the UI may draw device locations on a map (which loads OSM tiles).
 func (m *Manager) ShowMap() bool { return m.general.Load().ShowMap }
 
+// AppInventoryHours is how often the app inventory is pulled from Knox.
+func (m *Manager) AppInventoryHours(_ context.Context) int { return m.general.Load().AppInventoryHours }
+
+// AppReportDaily reports whether Knox is asked to generate a fresh app report once a day.
+func (m *Manager) AppReportDaily(_ context.Context) bool { return m.general.Load().AppReportDaily }
+
 func configured(k db.KnoxSettings) bool {
 	return k.BaseURL != "" && k.ClientID != "" && k.TenantID != "" && k.ClientSecretSeal != ""
 }
@@ -375,7 +381,14 @@ func (m *Manager) SaveGeneral(ctx context.Context, in GeneralInput, actor *auth.
 	m.saveMu.Lock()
 	defer m.saveMu.Unlock()
 	next := db.GeneralSettings{InstallationName: in.InstallationName, SyncIntervalMinutes: in.SyncIntervalMinutes,
-		CheckUpdates: m.general.Load().CheckUpdates, ShowMap: m.general.Load().ShowMap}
+		CheckUpdates: m.general.Load().CheckUpdates, ShowMap: m.general.Load().ShowMap,
+		AppInventoryHours: m.general.Load().AppInventoryHours, AppReportDaily: m.general.Load().AppReportDaily}
+	if in.AppInventoryHours != nil {
+		next.AppInventoryHours = *in.AppInventoryHours
+	}
+	if in.AppReportDaily != nil {
+		next.AppReportDaily = *in.AppReportDaily
+	}
 	if in.ShowMap != nil {
 		next.ShowMap = *in.ShowMap
 	}

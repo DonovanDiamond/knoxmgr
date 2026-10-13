@@ -24,7 +24,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | Block | File | Purpose |
 |---|---|---|
 | `Options` | `src/server/server.go` | config path, data dir, listen address or `Listener`, version, `CreateAdmin`, `OnReady(setupCode)` (when set, the setup code is not logged) |
-| `Run` | `src/server/server.go` | load config, open db, migrate, build services (auth, settings, mirror, sync, update), create the setup code, serve until the context ends |
+| `Run` | `src/server/server.go` | load config, open db, migrate, build services (auth, settings, mirror, sync, app inventory with the `OnSynced` hook, update), create the setup code, serve until the context ends |
 | `createLocalAdmin` | `src/server/server.go` | `-create-admin`: create a local admin and audit it, then return |
 | `adminPassword` | `src/server/server.go` | password from `KNOXMGR_ADMIN_PASSWORD`, no-echo prompt, or piped line |
 
@@ -65,17 +65,25 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | schema | `src/db/migrations/0007_show_map.sql` | `general_settings.show_map` (0/1, default 1) |
 | schema | `src/db/migrations/0008_group_assign_counts.sql` | `knox_groups.app_count`, `profile_count` (Knox-reported assigned apps / profiles, default 0) |
 | schema | `src/db/migrations/0005_device_cache.sql` | `knox_device_cache` (`device_id`, `kind`, `payload` JSON, `fetched_at`; primary key device+kind) |
+| schema | `src/db/migrations/0009_app_inventory.sql` | `device_apps`, `app_categories`, `app_category_map`, `app_inventory` (singleton: `last_pull_at`, `last_report_request_at`); `general_settings.app_inventory_hours` (1-168, default 6) and `app_report_daily` (0/1, default 1); seeds 9 categories (incl. `Other`) and 66 package mappings |
 | `DeviceCacheEntry`, `DeviceCache`, `PutDeviceCache` | `src/db/device_cache.go` | read / upsert the last live Knox answer of a kind for a device (`ErrNotFound` when none); `ReplaceAll` also prunes rows of dropped devices |
 | `Mirror`, `NewMirror`, `Snapshot`, `MirrorOrg`, `MirrorUser`, `MirrorGroup`, `MirrorMember`, `MirrorDevice` | `src/db/mirror.go` | mirror repository and row types |
 | `ReplaceAll`, `recountGroups` | `src/db/mirror.go` | replace the whole mirror from a `Snapshot` in one transaction; group user counts recomputed; `MirrorGroup` carries `AppCount` / `ProfileCount`, stored as given by `ReplaceAll` |
 | `Orgs`, `SubOrgCodes`, `Users`, `User`, `Groups`, `Group`, `GroupMembers`, `UserGroups`, `Devices`, `Device`, `DevicesOfUsers`, `selectScoped` | `src/db/mirror.go` | reads; `orgs` arg nil = unrestricted, empty = nothing, else `org_code IN`; `SubOrgCodes` is a recursive query |
 | `UpsertUser`, `DeleteUser`, `UpsertGroup`, `DeleteGroup`, `AddMembers`, `RemoveMembers`, `changeMembers` | `src/db/mirror.go` | write-through patches after Knox accepted a change |
 | `SyncRun`, `SyncCounts`, `StartRun`, `FinishRun`, `RecentRuns`, `LastSuccess` | `src/db/mirror.go` | `sync_runs` history |
+| schema | `src/db/migrations/0010_app_inventory_fixes.sql` | adds `device_apps.mandatory`; deletes `knox_device_cache` rows of kind `apps`; seeds Messaging (tachyon, `com.Slack`), Productivity (Authenticator, Acrobat) and Entertainment (Shazam, Candy Crush) mappings |
+| `IsEnrolled` | `src/knox/enrolled.go` | the single definition of an enrolled device status, used by `api` and `sync` |
+| `Apps`, `NewApps`, `DeviceAppRow`, `DeviceApp`, `AppFilter`, `AppSummary`, `AppDevice`, `Category`, `InventoryState`, `SystemCategory`, `ErrInvalidCategoryName` | `src/db/apps.go` | app inventory and category repository; `orgs` args follow `Mirror` (nil = unrestricted, empty = nothing) |
+| `ReplaceDeviceApps`, `DeviceApps`, `MarkUninstallRequested` | `src/db/apps.go` | replace one device's app rows in a transaction (clears the uninstall mark); list a device's apps with resolved category (`System` from the system flag, else mapped, else `Other`); mark a row uninstall requested |
+| `Apps` (method), `App`, `AppDevices`, `summaries`, `scoped`, `appScopeFrom` | `src/db/apps.go` | in-scope app list (search, category, system filters), one app, and its in-scope devices; scope is the owner's org, so unassigned devices are admin-only |
+| `Categories`, `CreateCategory`, `RenameCategory`, `DeleteCategory`, `SetAppCategory`, `categoryName` | `src/db/apps.go` | category CRUD (`System` reserved, 100-byte cap, unique names; delete cascades the mappings); `SetAppCategory` maps a package, nil clears, returns the previous id |
+| `Inventory` (method), `SetLastPull`, `SetLastReportRequest`, `parseOptTime` | `src/db/apps.go` | persisted pull / report-request times |
 | `User`, `Users` (`Create`, `GetByID`, `GetByUsername`, `Update`, `UpsertADUser`, `CountAdmins`, `List`, `Delete`) | `src/db/users.go` | app account repository; `Delete` nulls `invites.invited_by`; AD upsert never overwrites a local row (`ErrSourceConflict`) |
 | `RefreshTokens` (`Insert`, `GetValid`, `GetByHash`, `Revoke`, `RevokeAllForUser`) | `src/db/refresh_tokens.go` | hashed refresh token store; single-use revoke; `GetByHash` finds revoked tokens so replay can be detected |
 | `AuditEntry`, `Audit` (`Insert`, `InsertInvites`, `ListRecent`, `LatestInvites`), `insertAudit` | `src/db/audit.go` | append-only audit log; `LatestInvites(ctx, ids)` maps user id to its latest invite time (`MAX(invited_at)` from `invites`, batched at 500); `InsertInvites(ctx, e, userIDs)` writes the audit row and one `invites` row per id in one transaction; `insertAudit` works inside a transaction |
 | `Settings` (`Get`, `Set`) | `src/db/settings.go` | key/value settings; `Set` audits atomically |
-| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
+| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`, `AppInventoryHours`, `AppReportDaily`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
 
 ## src/secretbox
 
@@ -95,6 +103,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `GetGeneral`, `SaveGeneral` | `src/settings/manager.go` | installation name and sync interval |
 | `CheckUpdates` | `src/settings/manager.go` | whether GitHub update checks are allowed (live general setting) |
 | `ShowMap` | `src/settings/manager.go` | whether the device location map is shown (live general setting; `GeneralInput.ShowMap` nil keeps the stored value) |
+| `AppInventoryHours`, `AppReportDaily` | `src/settings/manager.go` | live general settings read by `sync.Inventory` (hours 1-168; `GeneralInput.AppReportDaily` nil keeps the stored value) |
 | `SetHooks`, `onKnoxSaved`, `onGeneralSaved` | `src/settings/manager.go` | callbacks run after a successful `SaveKnox` / `SaveGeneral` (main wires the sync scheduler); must not block |
 | `KnoxInput`, `ADInput`, `ADMapping`, `GeneralInput`, `normalise`, `InvalidError`, `Region`, `Regions` | `src/settings/validate.go` | input validation (400 via `InvalidError`), preset Knox regions |
 
@@ -126,7 +135,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `envelope`, `call`, `joinIDs`, `set` | `src/knox/client.go` | generic request/decode; `;`-joined id lists; optional form fields |
 | `User`, `UserPage`, `Group`, `GroupPage`, `Organization`, `Count` | `src/knox/types.go` | Knox payloads; `Count` accepts number, string or a `{total}` object; `DeviceCount` reads the spec object: enrolled, falling back to total |
 | `Device`, `DevicePage`, `DeviceQuery`, `SelectDeviceList`, `SelectDeviceInfo`, `SelectDevicesByUser` | `src/knox/devices.go`, `src/knox/types.go` | device operations; `SelectDevicesByUser` assumes a `devicelist` wrapper |
-| `DeviceDetail`, `DeviceApp`, `DeviceLocation`, `SelectDeviceDetail`, `SelectDeviceAppList`, `SelectDeviceLocation`, `SelectDeviceLocationHistory`, `requireDeviceID` | `src/knox/device_detail.go` | live per-device calls (send `deviceId` only); history takes whole days (`period`), rounded up; Knox has no agent/client version, so `AgentProfileName`/`ClientProfileName` are used |
+| `DeviceDetail`, `DeviceApp` (with `System`, `Managed`, `Mandatory`, `flag`), `DeviceLocation`, `SelectDeviceDetail`, `SelectDeviceAppList` (pages of 1000, at most 10), `SelectDeviceLocation`, `SelectDeviceLocationHistory`, `requireDeviceID` | `src/knox/device_detail.go` | live per-device calls (send `deviceId` only); history takes whole days (`period`), rounded up; Knox has no agent/client version, so `AgentProfileName`/`ClientProfileName` are used |
+| `UninstallApp`, `SyncInstalledAppList`, `ValidPackage` | `src/knox/app_commands.go` | device commands `sendDeviceControlForUninstallApp` / `...SyncInstalledAppList`; package names validated before sending; `knoxId` optional |
 | `UserQuery`, `UserInput`, `SelectUsers`, `SelectUserWithID`, `CreateUser`, `UpdateUser`, `PurgeUser`, `RequestEnrollment`, `EnrollmentResult` | `src/knox/users.go` | user operations |
 | `GroupQuery.WithCounts` | `src/knox/groups.go` | sends `needDeviceUserCount=yes`; the sync fetches groups with it to get `assignAppCount` / `assignProfileCount` |
 | `GroupQuery`, `SelectGroups`, `InsertGroup`, `DeleteGroup`, `SelectGroupUsers`, `InsertGroupUnits`, `DeleteGroupUnits`, `groupUnits` | `src/knox/groups.go` | USER group operations and membership |
@@ -140,6 +150,10 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `Scheduler`, `New`, `Start`, `tick`, `interval` | `src/sync/sync.go` | loop: sync at start-up, every configured interval, on Knox save; wake-ups restart the countdown; falls back to 15m |
 | `SyncNow`, `Running`, `begin`, `run`, `ErrNotConfigured` | `src/sync/sync.go` | single-flight run in the background (records a `sync_runs` row; failure keeps the mirror) |
 | `KnoxSaved`, `Reschedule`, `signal` | `src/sync/sync.go` | non-blocking wake-ups for the loop |
+| `OnSynced` | `src/sync/sync.go` | hook called after every successful run with its trigger; server wires it to `Inventory.AfterSync` |
+| `Inventory`, `NewInventory`, `ErrInventoryRunning` | `src/sync/apps.go` | keeps the mirrored app lists fresh; `hours` / `daily` funcs come from `settings.Manager` |
+| `PullDevice`, `PullAll`, `forEach`, `enrolledDevices` | `src/sync/apps.go` | per-device replace from Knox; full pull over enrolled devices with 4 workers, single-flight, per-device failures logged and counted |
+| `AfterSync`, `PullIfDue`, `reportIfDue`, `requestReports`, `Start` | `src/sync/apps.go` | manual sync always pulls, others when `hours` have passed; once a day asks enrolled Android devices to report (one `device.apps.report_request` audit row); `Start` re-checks every minute from persisted times |
 | `fetch`, `collect` | `src/sync/sync.go` | read orgs, users, USER groups with members, devices from Knox (1000 per page, 20 pages max) into a `db.Snapshot`; owner org copied onto devices |
 
 ## src/update
@@ -160,8 +174,9 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `selectUsers`, `selectUserWithID`, `createUser`, `updateUser`, `purgeUser`, `requestEnrollment`, `applyUserForm`, `splitIDs`, `page`, `window` | `src/knoxmock/handlers_user.go` | user endpoints |
 | `selectDeviceList`, `selectDeviceInfo`, `selectDevicesByUser` | `src/knoxmock/handlers_device.go` | device endpoints |
 | `seedDevices`, `device`, `deviceView`, `deviceViews` | `src/knoxmock/data.go` | 6 seeded devices covering every freshness band, an unassigned and a non-enrolled one |
-| `selectDeviceAppList`, `selectDeviceLocation`, `selectDeviceLocationHistory`, `knownDevice` | `src/knoxmock/handlers_device.go` | live device endpoints; `period` 1-30 days, `knownDevice` resolves `deviceId` or writes the error |
-| `deviceApps`, `locationHistory`, `locationDays` | `src/knoxmock/data.go` | generated apps and location trail per device (30 days back) |
+| `selectDeviceAppList` (paged), `selectDeviceLocation`, `selectDeviceLocationHistory`, `knownDevice` | `src/knoxmock/handlers_device.go` | live device endpoints; `period` 1-30 days, `knownDevice` resolves `deviceId` or writes the error |
+| `androidDevice`, `uninstallApp`, `syncInstalledAppList` | `src/knoxmock/handlers_device.go` | app commands: Android devices only; uninstall removes the app from the device's list (persisting), refuses system apps (`1901013`) and unknown packages; the report request only checks the device |
+| `deviceApps`, `locationHistory`, `locationDays` | `src/knoxmock/data.go` | generated apps (25-40 per enrolled Android device, about 12 system; `systemApp`/`isManaged` as `Y`/`N`) and location trail per device (30 days back) |
 | `selectGroups`, `insertGroup`, `deleteGroup`, `selectGroupUsers`, `insertGroupUnits`, `deleteGroupUnits`, `changeUnits` | `src/knoxmock/handlers_group.go` | group endpoints; with `needDeviceUserCount=yes` each group also carries `assignAppCount` / `assignProfileCount` (seeded 5/3 and 2/1, new groups 0) |
 | `orgSelectList`, `orgSelect`, `orgSelectUsers` | `src/knoxmock/handlers_org.go` | org endpoints |
 
@@ -169,7 +184,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 
 | Block | File | Purpose |
 |---|---|---|
-| `Knox` (interface), `Syncer` (interface), `Deps`, `New` | `src/api/api.go` | build fiber app and routes; `Knox` is the slice of `*knox.Client` the handlers use; `Deps.Knox` is `func() Knox` (nil while unconfigured), plus `Settings`, `Setup`, `SetupLimiter`, `Mirror` (`*db.Mirror`), `Sync` (`Syncer`: `SyncNow`, `Running`), `Update` (`*update.Checker`), `Version` |
+| `Knox` (interface), `Syncer` (interface), `Inventory` (interface: `PullDevice`), `Deps`, `New` | `src/api/api.go` | build fiber app and routes; `Knox` is the slice of `*knox.Client` the handlers use (incl. `UninstallApp`, `SyncInstalledAppList`); `Deps.Knox` is `func() Knox` (nil while unconfigured), plus `Settings`, `Setup`, `SetupLimiter`, `Mirror` (`*db.Mirror`), `Apps` (`*db.Apps`), `Inventory`, `Sync` (`Syncer`: `SyncNow`, `Running`), `Update` (`*update.Checker`), `Version` |
 | `setupGate`, `knoxConfigured` | `src/api/api.go` | 409 `setup_required` until an admin exists (health and `/api/setup/*` exempt); 503 `knox_not_configured` on `/api/knox` |
 | `errorHandler`, `errorBody` | `src/api/api.go` | JSON error shape; maps not found 404, duplicate/source conflict 409, `knox.Error` 502, `knox.ErrUnreachable` 502 `knox_unreachable`; 500 detail only logged |
 | `health`, `requestLog` | `src/api/api.go` | `{status, name, version, knoxConfigured, setupRequired}`, request logging |
@@ -191,14 +206,20 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `listUserGroups`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers` | `src/api/knox.go` | user handlers; reads from the mirror (`listUserGroups` is `GET /users/:id/groups`), scoped in SQL; create/update/purge patch the mirror after Knox succeeds; purge needs `confirmUserId` |
 | `listGroups`, `getGroup`, `createGroup`, `deleteGroup`, `listMembers`, `addMembers`, `removeMembers`, `changeMembers` | `src/api/knox.go` | group handlers; groups visible to all, members filtered to scope in SQL; create/delete/membership changes patch the mirror after Knox succeeds; `listMembers` returns each member with `devices` |
 | `freshnessOf`, `deviceFreshness`, `isEnrolled`, `deviceView`, `deviceSummary`, `viewOfDevice`, `summarize`, `listDevices`, `getDevice`, `listUserDevices` | `src/api/devices.go` | freshness constants (24h stale, 7d old), enrolled statuses, device JSON and the three device handlers; read from the mirror; scope via the owner's org in SQL, out of scope 404 |
-| `liveOrCached`, `deviceInfo`, `detailPayload`, `detailResponse`, `detailOf`, `rfc3339`, `canViewLocation`, `deviceDetail`, `appView`, `appsPayload`, `deviceApps`, `locationPoint`, `locationPayload`, `pointOf`, `locationDays`, `deviceLocation` | `src/api/device_live.go` | live device detail/apps/location with cache fallback on `knox_unreachable`; location admin/write only (404 otherwise), validated `days`, audited `device.location.view` |
+| `liveOrCached`, `deviceInfo`, `detailPayload`, `detailResponse`, `detailOf`, `rfc3339`, `canViewLocation`, `deviceDetail`, `locationPoint`, `locationPayload`, `pointOf`, `locationDays`, `deviceLocation` | `src/api/device_live.go` | live device detail/location with cache fallback on `knox_unreachable`; location admin/write only (404 otherwise), validated `days`, audited `device.location.view` |
+| `appRoutes`, `appAdminRoutes`, `appSummaryView`, `appDeviceView`, `appPackage`, `listApps`, `getApp` | `src/api/apps.go` | `/api/knox/apps`, `/apps/:package`, `/app-categories`, `/devices/:id/apps*` (every role, scoped) and the admin category routes; the package param must pass `knox.ValidPackage` |
+| `protectedReason`, `errAppProtected` | `src/api/apps.go` | why an app may not be uninstalled (system, managed, mandatory, `Device management` category, built-in MDM packages/prefixes); uninstall answers 403 `app_protected` |
+| `uninstallApp`, `uninstallOne`, `uninstallResult` | `src/api/apps.go` | `POST /apps/:package/uninstall` (write): per-device scope and write check, Android, installed, not system; one Knox call and one `device.app.uninstall` audit row per device; per-device result |
+| `deviceApps`, `deviceAppView`, `refreshDeviceApps` | `src/api/apps.go` | `GET /devices/:id/apps`: pull that device (Android) then answer from the mirror, `stale` when the pull failed, `syncedAt` falls back to the global last pull; `POST .../apps/refresh` (write) asks the device to report, audited `device.apps.refresh` |
+| `categoryView`, `categories`, `category`, `listAppCategories`, `categoryID`, `categoryNameBody`, `createAppCategory`, `renameAppCategory`, `deleteAppCategory`, `setAppCategory` | `src/api/apps.go` | category list (all roles) and admin changes, audited `app.category.create` / `rename` / `delete` / `assign` |
 | `scope`, `scopeOrgs`, `mirrorUser`, `mirrorGroup`, `errGroupNotFound`, `mirrorWrite`, `refreshMirrorUser`, `userOfMirror`, `usersOfMirror`, `mirrorOfUser`, `orgsOfMirror`, `groupOfMirror`, `groupsOfMirror`, `devicesOfMirror` | `src/api/mirror.go` | caller's `Scope` and SQL org list from the mirror (nil = admin); mirror reads that look like not-found when absent; mirror rows to the `knox.*` JSON shapes; post-Knox mirror updates log, not fail |
 | `startSync`, `syncStatus`, `syncRunView`, `viewOfRun`, `syncHistory` | `src/api/sync.go` | `POST /api/admin/sync` (202, audited `admin.sync.start`) and `GET /api/admin/sync` (running flag, last 10 runs) |
 | `updateView`, `server.updateView`, `updateStatus`, `updateCheck` | `src/api/update.go` | `GET /api/admin/update`; `POST /api/admin/update/check` (409 `updates_disabled`, audited `admin.update.check`) |
 | `adminRoutes`, `appUser`, `adminListUsers`, `adminGetUser`, `adminCreateUser`, `adminUpdateUser`, `adminDeleteUser`, `adminAudit`, `checkRoleShape`, `otherEnabledAdmin`, `errLastAdmin` | `src/api/admin.go` | `/api/admin` app-account CRUD and audit listing (admin only); last enabled admin is protected |
 | `record`, `jsonPtr` | `src/api/audit.go` | write an audit row after a mutation; failure logged only |
 | `bind`, `badRequest`, `checkPattern`, `checkText`, `checkEmail`, `checkIDList`, id regexps | `src/api/validate.go` | request validation |
-| `serveWeb` | `src/api/web.go` | embedded UI with SPA fallback, cache headers, CSP on `.html` |
+| `serveWeb` | `src/api/web.go` | embedded UI; SPA fallback to index.html unless under `/_app/` or a known static extension (404), cache headers, CSP on `.html` |
+| web tests | `src/api/web_test.go` | unknown `/api/*` paths return JSON 404; SPA fallback and static rules |
 | `contentSecurityPolicy`, `inlineScript` | `src/api/web.go` | CSP with a sha256 per inline script of `index.html`, computed at start-up |
 | `TestSecurityHeaders` and others | `src/api/api_hardening_test.go` | headers, HSTS, CSP, trusted-proxy client IP, cross-origin refusal, Knox 4xx admin-only, failed-login log |
 
@@ -239,7 +260,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `KnoxForm` | `web/src/lib/components/KnoxForm.svelte` | Knox connection form with Test and Save, shared by the setup wizard and the Knox settings page |
 | `KnoxOffline` | `web/src/lib/components/KnoxOffline.svelte` | "Knox is not connected" notice with a link for admins |
 | `Organization`, `KnoxUser`, `Group`, `AppUser`, and request types | `web/src/lib/api/types.ts` | API types; `KnoxUser.devices` |
-| `Device`, `Freshness`, `listDevices`, `getDevice`, `listUserDevices`, `DeviceDetail`, `DeviceApp`, `DeviceLocation`, `GeoPoint`, `getDeviceDetail`, `getDeviceApps`, `getDeviceLocation` | `web/src/lib/api/devices.ts` | `/api/knox` device calls, incl. live detail/apps/location |
+| `Device`, `Freshness`, `listDevices`, `getDevice`, `listUserDevices`, `DeviceDetail`, `DeviceLocation`, `GeoPoint`, `getDeviceDetail`, `getDeviceLocation` | `web/src/lib/api/devices.ts` | `/api/knox` device calls, incl. live detail/location |
+| `AppSummary`, `AppDevice`, `AppCategory`, `UninstallResult`, `DeviceAppRow`, `DeviceAppsResponse`, `listApps`, `getApp`, `uninstallApp`, `listAppCategories`, `createAppCategory`, `renameAppCategory`, `deleteAppCategory`, `setAppCategory`, `getDeviceApps`, `refreshDeviceApps`, `compareCategories` | `web/src/lib/api/apps.ts` | `/api/knox/apps*`, `/api/knox/app-categories`, `/api/knox/devices/:id/apps*` and the admin category calls |
 | `listOrgs`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers`, group calls | `web/src/lib/api/knox.ts` | `/api/knox` calls |
 | `listAppUsers`, `createAppUser`, `updateAppUser`, `deleteAppUser`, `listAudit` | `web/src/lib/api/admin.ts` | `/api/admin` calls |
 | `theme` | `web/src/lib/theme.svelte.ts` | system/light/dark cycle; `fclight`/`fcdark`; persisted in localStorage |
@@ -247,12 +269,13 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `shell`, `usePanel` | `web/src/lib/shell.svelte.ts` | header title/back and per-page side panel / phone action bar |
 | orgs store | `web/src/lib/orgs.svelte.ts` | cached org tree for pickers and names |
 | `toast` | `web/src/lib/toast.svelte.ts` | transient messages |
-| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (shows `Version x` from health and `UpdateNotice` for admins), collapsing title (optional right-aligned `actions` snippet), toast host |
+| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps for every role; shows `Version x` from health and `UpdateNotice` for admins), collapsing title (optional right-aligned `actions` snippet), toast host |
 | `Dialog`, `ConfirmDelete`, `InviteResultDialog` | `web/src/lib/components/` | modals; purge asks for the typed user id |
 | `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
 | `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled |
 | `UserEditor`, `Field`, `OrgSelect`, `Note` | `web/src/lib/components/` | user create/edit form and its parts |
-| `DeviceApps`, `DeviceLocation` | `web/src/lib/components/` | device screen sections: filterable app list; location (current fix, 1/7/30-day history on a bundled Leaflet map with OSM tiles, hidden when `showMap` is off or no points; coordinates table, OpenStreetMap links); both show an "as of" note when cached |
+| `DeviceApps`, `DeviceLocation` | `web/src/lib/components/` | device screen sections: app list from the mirror (`getDeviceApps`) grouped by category with an `AppIcon`, system apps hidden by default, "as of" time and a stale note, Refresh (write) and a confirmed Uninstall per app; location (current fix, 1/7/30-day history on a bundled Leaflet map with OSM tiles, hidden when `showMap` is off or no points; coordinates table, OpenStreetMap links); location shows an "as of" note when cached |
+| `AppIcon` | `web/src/lib/components/AppIcon.svelte` | offline monogram tile (`sm`/`md`/`lg`); hue hashed from the package, so no icon requests |
 | `DeviceBadge`, `Chip`, `Avatar`, `Icon` | `web/src/lib/components/` | small display components (`DeviceBadge` `count` optional: omitted shows freshness dot only) |
 | layout | `web/src/routes/+layout.svelte` | restore session on load, redirect to `/login`, wrap pages in `Shell` |
 | `ssr = false`, `prerender = false` | `web/src/routes/+layout.ts` | SPA mode |
@@ -263,13 +286,16 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | user detail | `web/src/routes/users/[id]/+page.svelte` | view, edit, invite, delete |
 | devices list | `web/src/routes/devices/+page.svelte` | device list, search, freshness badge per device |
 | device detail | `web/src/routes/devices/[id]/+page.svelte` | one device: mirror data, live info and profiles, `DeviceApps`, `DeviceLocation` (when `canViewLocation`) |
+| apps list | `web/src/routes/apps/+page.svelte` | installed apps across in-scope devices grouped by category (name, device count), search, category filter, show-system toggle |
+| app detail | `web/src/routes/apps/[package]/+page.svelte` | one app: devices with it (avatar select, freshness, version, managed), write users uninstall from the selected devices behind a confirm dialog with per-device results; admins assign the category |
 | groups list | `web/src/routes/groups/+page.svelte` | group list (create for admins; delete lives on the group detail screen) |
 | group detail | `web/src/routes/groups/[id]/+page.svelte` | Members / Apps / Profiles counts summary; members with avatar select and "Remove from group (N)"; Add members; Delete group (admin) |
 | admin page | `web/src/routes/admin/+page.svelte` | app accounts and audit log |
 | setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code (prefilled from the `#code=` fragment by the desktop app, then stripped with `history.replaceState`), admin, Knox (skippable), done |
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |
 | AD settings | `web/src/routes/admin/settings/ad/+page.svelte` | AD settings, group mappings, test sign-in |
-| general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now", show-map toggle with privacy note |
+| general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now", show-map toggle with privacy note, app refresh interval (1-168 h) and daily app-report toggle |
+| app categories | `web/src/routes/admin/settings/apps/+page.svelte` | admin: add, rename and delete categories (delete asks to confirm; mappings go with it); linked from the admin page |
 | styles | `web/src/app.css` | Tailwind v4 + daisyUI themes `fclight`/`fcdark`, Figtree via @fontsource; `row-hover` for clickable rows |
 | `app.html`, `app.d.ts` | `web/src/` | SvelteKit template and ambient types |
 | kit/vite config | `web/vite.config.ts` | sveltekit plugin options, adapter-static, `/api` dev proxy |

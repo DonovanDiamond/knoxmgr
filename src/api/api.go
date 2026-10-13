@@ -43,7 +43,8 @@ type Knox interface {
 	SelectDeviceInfo(ctx context.Context, deviceID string) (knox.Device, error)
 	SelectDevicesByUser(ctx context.Context, userID string) ([]knox.Device, error)
 	SelectDeviceDetail(ctx context.Context, deviceID string) (knox.DeviceDetail, error)
-	SelectDeviceAppList(ctx context.Context, deviceID string) ([]knox.DeviceApp, error)
+	UninstallApp(ctx context.Context, deviceID, pkg, knoxID string) error
+	SyncInstalledAppList(ctx context.Context, deviceID string) error
 	SelectDeviceLocation(ctx context.Context, deviceID string) (knox.DeviceLocation, error)
 	SelectDeviceLocationHistory(ctx context.Context, deviceID string, from, to time.Time) ([]knox.DeviceLocation, error)
 }
@@ -56,6 +57,11 @@ type Syncer interface {
 	Running() (id int64, running bool)
 }
 
+// Inventory pulls one device's installed apps from Knox into the mirror.
+type Inventory interface {
+	PullDevice(ctx context.Context, deviceID string) error
+}
+
 type Deps struct {
 	Log   zerolog.Logger
 	Auth  *auth.Service
@@ -63,6 +69,9 @@ type Deps struct {
 	Audit *db.Audit
 	// Mirror is the local copy of the Knox tenant that reads are served from.
 	Mirror *db.Mirror
+	// Apps is the mirrored app inventory and the package categories; Inventory refreshes it per device.
+	Apps      *db.Apps
+	Inventory Inventory
 	// Sync runs and reports mirror syncs.
 	Sync Syncer
 	// Knox returns the live client, or nil while Knox is not configured (settings can swap it).
@@ -118,8 +127,12 @@ func New(d Deps) *fiber.App {
 	a.Post("/logout", sameOrigin, s.logout)
 	a.Get("/me", Authenticate(d.Auth, d.Users), s.me)
 
-	s.knoxRoutes(api.Group("/knox", Authenticate(d.Auth, d.Users), s.knoxConfigured))
-	s.adminRoutes(api.Group("/admin", Authenticate(d.Auth, d.Users), RequireAdmin()))
+	knoxG := api.Group("/knox", Authenticate(d.Auth, d.Users), s.knoxConfigured)
+	s.knoxRoutes(knoxG)
+	s.appRoutes(knoxG)
+	adminG := api.Group("/admin", Authenticate(d.Auth, d.Users), RequireAdmin())
+	s.adminRoutes(adminG)
+	s.appAdminRoutes(adminG)
 
 	api.All("/*", func(fiber.Ctx) error { return fiber.NewError(fiber.StatusNotFound, "not found") })
 	app.Use(s.serveWeb)
@@ -143,6 +156,8 @@ func (s *server) errorHandler(c fiber.Ctx, err error) error {
 		return c.Status(fe.Code).JSON(errorBody{Error: fe.Message})
 	case errors.As(err, &se):
 		return c.Status(se.status).JSON(errorBody{Error: se.msg, Code: se.code})
+	case errors.Is(err, db.ErrInvalidCategoryName):
+		return c.Status(fiber.StatusBadRequest).JSON(errorBody{Error: err.Error()})
 	case errors.As(err, &ie):
 		return c.Status(fiber.StatusBadRequest).JSON(errorBody{Error: ie.Msg})
 	case errors.Is(err, auth.ErrForbidden):
