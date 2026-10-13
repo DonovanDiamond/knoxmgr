@@ -3,7 +3,8 @@
 	import { getDeviceLocation, type DeviceLocation, type GeoPoint } from '#lib/api/devices';
 	import Note from './Note.svelte';
 
-	let { id }: { id: string } = $props();
+	// Stays mounted across tabs so location is fetched once per page view (and audited once); `tab` picks what to render.
+	let { id, tab }: { id: string; tab: string } = $props();
 
 	let days = $state<1 | 7 | 30>(7);
 	let loc = $state<DeviceLocation | null>(null);
@@ -85,7 +86,27 @@
 	{/if}
 {/snippet}
 
-<section class="mt-8">
+{#if tab === 'summary'}
+	<div class="rounded-lg border border-base-300 p-3">
+		<div class="flex items-baseline justify-between gap-2">
+			<h2 class="text-[18px] font-semibold">Location</h2>
+			<a href="?tab=location" class="link text-[15px]" data-sveltekit-noscroll>Open</a>
+		</div>
+		{#if error}
+			<p class="muted">{error}</p>
+		{:else if loc}
+			{#if loc.current}
+				<p class="text-[18px] break-words">{@render coords(loc.current)}</p>
+				<p class="muted text-[15px]">{when(loc.current.time)}</p>
+			{:else}
+				<p class="muted">Not available</p>
+			{/if}
+		{:else}
+			<span class="loading loading-spinner"></span>
+		{/if}
+	</div>
+{:else if tab === 'location'}
+<section>
 	<h2 class="mb-2 text-[20px] font-semibold">Location</h2>
 	{#if error}
 		<Note tone="warn">{error}</Note>
@@ -125,3 +146,4 @@
 		</div>
 	{/if}
 </section>
+{/if}

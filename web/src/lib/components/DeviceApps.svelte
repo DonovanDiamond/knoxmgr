@@ -3,7 +3,8 @@
 	import { getDeviceApps, type DeviceApp } from '#lib/api/devices';
 	import Note from './Note.svelte';
 
-	let { id }: { id: string } = $props();
+	// Stays mounted across tabs so the apps are fetched once per page view; `tab` picks what to render.
+	let { id, tab }: { id: string; tab: string } = $props();
 
 	let apps = $state<DeviceApp[]>([]);
 	let cachedAt = $state('');
@@ -34,7 +35,24 @@
 	});
 </script>
 
-<section class="mt-8">
+{#if tab === 'summary'}
+	<div class="rounded-lg border border-base-300 p-3">
+		<div class="flex items-baseline justify-between gap-2">
+			<h2 class="text-[18px] font-semibold">Applications{loading || error ? '' : ` (${apps.length})`}</h2>
+			<a href="?tab=apps" class="link text-[15px]" data-sveltekit-noscroll>View all</a>
+		</div>
+		{#if loading}
+			<span class="loading loading-spinner"></span>
+		{:else if error}
+			<p class="muted">{error}</p>
+		{:else if apps.length}
+			<p class="mt-1 text-[15px] break-words">{apps.slice(0, 5).map((a) => a.name).join(', ')}{apps.length > 5 ? ', …' : ''}</p>
+		{:else}
+			<p class="muted">No applications</p>
+		{/if}
+	</div>
+{:else if tab === 'apps'}
+<section>
 	<h2 class="mb-2 text-[20px] font-semibold">Applications</h2>
 	{#if loading}
 		<span class="loading loading-spinner"></span>
@@ -59,3 +77,4 @@
 		</div>
 	{/if}
 </section>
+{/if}

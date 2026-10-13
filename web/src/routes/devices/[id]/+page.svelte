@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api/client';
 	import { getDevice, getDeviceDetail, type Device, type DeviceDetail } from '#lib/api/devices';
@@ -8,6 +9,9 @@
 	import DeviceApps from '#components/DeviceApps.svelte';
 	import DeviceLocation from '#components/DeviceLocation.svelte';
 
+	// A derived string only changes with the device, so switching ?tab= does not reload anything.
+	const deviceKey = $derived(page.params.id ?? '');
+
 	let device = $state<Device | null>(null);
 	let loading = $state(true);
 	let loadError = $state('');
@@ -16,7 +20,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			device = await getDevice(page.params.id ?? '');
+			device = await getDevice(deviceKey);
 		} catch (e) {
 			loadError = e instanceof ApiError ? e.message : 'Could not reach the server.';
 		} finally {
@@ -24,13 +28,14 @@
 		}
 	}
 	$effect(() => {
-		load();
+		deviceKey;
+		untrack(load);
 	});
 
 	let detail = $state<DeviceDetail | null>(null);
 	let detailError = $state('');
 	$effect(() => {
-		const id = page.params.id ?? '';
+		const id = deviceKey;
 		detail = null;
 		detailError = '';
 		getDeviceDetail(id)
@@ -38,6 +43,18 @@
 			.catch((e) => {
 				detailError = e instanceof ApiError ? e.message : 'Could not reach the server.';
 			});
+	});
+
+	const tabs = $derived<[string, string][]>([
+		['summary', 'Summary'],
+		['policies', 'Policies'],
+		['apps', 'Applications'],
+		...(detail?.canViewLocation ? [['location', 'Location'] as [string, string]] : [])
+	]);
+	// Unknown or unavailable tabs fall back to the summary.
+	const tab = $derived.by(() => {
+		const t = page.url.searchParams.get('tab') ?? '';
+		return tabs.some(([k]) => k === t) ? t : 'summary';
 	});
 
 	const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '');
@@ -106,19 +123,45 @@
 	</dl>
 	{#if device.lastConnection}<p class="muted mt-2 text-[15px]">Last connection {fmtDate(device.lastConnection)}</p>{/if}
 
-	{#if detail}
-		<section class="mt-8">
-			<h2 class="mb-2 text-[20px] font-semibold">Policies</h2>
-			{#if detail.profiles.length}
-				<ul class="flex flex-wrap gap-2">
-					{#each detail.profiles as p (p)}<li class="badge badge-outline h-auto py-1 text-[15px]">{p}</li>{/each}
-				</ul>
-			{:else}
-				<p class="muted">No policies</p>
-			{/if}
-		</section>
-	{/if}
+	<div role="tablist" class="tabs tabs-border mt-6 overflow-x-auto flex-nowrap">
+		{#each tabs as [key, label] (key)}
+			<a role="tab" href="?tab={key}" class="tab whitespace-nowrap {tab === key ? 'tab-active' : ''}" aria-selected={tab === key} data-sveltekit-noscroll>{label}</a>
+		{/each}
+	</div>
 
-	<DeviceApps id={device.deviceId} />
-	{#if detail?.canViewLocation}<DeviceLocation id={device.deviceId} />{/if}
+	<div class="mt-4 {tab === 'summary' ? 'grid gap-3 md:grid-cols-2 lg:grid-cols-3' : ''}">
+		{#if tab === 'summary' || tab === 'policies'}
+			{#if !detail}
+				<div><span class="loading loading-spinner"></span></div>
+			{:else if tab === 'summary'}
+				<div class="rounded-lg border border-base-300 p-3">
+					<div class="flex items-baseline justify-between gap-2">
+						<h2 class="text-[18px] font-semibold">Policies ({detail.profiles.length})</h2>
+						<a href="?tab=policies" class="link text-[15px]" data-sveltekit-noscroll>View all</a>
+					</div>
+					{#if detail.profiles.length}
+						<ul class="mt-1 flex flex-wrap gap-2">
+							{#each detail.profiles.slice(0, 4) as p (p)}<li class="badge badge-outline h-auto py-1 text-[15px]">{p}</li>{/each}
+							{#if detail.profiles.length > 4}<li class="muted text-[15px]">+{detail.profiles.length - 4} more</li>{/if}
+						</ul>
+					{:else}
+						<p class="muted">No policies</p>
+					{/if}
+				</div>
+			{:else}
+				<section>
+					<h2 class="mb-2 text-[20px] font-semibold">Policies</h2>
+					{#if detail.profiles.length}
+						<ul class="flex flex-wrap gap-2">
+							{#each detail.profiles as p (p)}<li class="badge badge-outline h-auto py-1 text-[15px]">{p}</li>{/each}
+						</ul>
+					{:else}
+						<p class="muted">No policies</p>
+					{/if}
+				</section>
+			{/if}
+		{/if}
+		<DeviceApps id={device.deviceId} {tab} />
+		{#if detail?.canViewLocation}<DeviceLocation id={device.deviceId} {tab} />{/if}
+	</div>
 {/if}
