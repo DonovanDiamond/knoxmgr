@@ -79,6 +79,9 @@ export interface Group {
 	groupName: string;
 	groupType: string;
 	userCount: number;
+	/** Assigned in Knox, as of the last sync. */
+	assignAppCount: number;
+	assignProfileCount: number;
 }
 
 /** Users Knox could not email; everyone else in the request was invited. */

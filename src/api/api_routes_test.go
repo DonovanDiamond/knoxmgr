@@ -404,3 +404,16 @@ func TestKnoxOrgsScope(t *testing.T) {
 		t.Fatalf("no token: %d", r.StatusCode)
 	}
 }
+
+func TestKnoxGroupCountsJSON(t *testing.T) {
+	e := newEnv(t)
+	tok := e.token(t, "root")
+	if _, err := e.db.Exec(`UPDATE knox_groups SET app_count = 3, profile_count = 2 WHERE group_id = ?`, knoxmock.GroupPilot); err != nil {
+		t.Fatal(err)
+	}
+	var one map[string]any
+	decode(t, do(t, e.app, "GET", "/api/knox/groups/"+knoxmock.GroupPilot, "", tok), &one)
+	if one["assignAppCount"] != float64(3) || one["assignProfileCount"] != float64(2) {
+		t.Errorf("group detail = %v", one)
+	}
+}

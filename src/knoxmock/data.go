@@ -77,7 +77,11 @@ type group struct {
 	TenantID     string `json:"tenantId"`
 	Created      string `json:"created"`
 	UserCount    *int   `json:"userCount,omitempty"`
+	AppCount     *int   `json:"assignAppCount,omitempty"`
+	ProfileCount *int   `json:"assignProfileCount,omitempty"`
 	members      map[string]struct{}
+	apps         int
+	profiles     int
 }
 
 func now() string { return time.Now().UTC().Format(timeLayout) }
@@ -119,11 +123,14 @@ func (s *Server) seed() {
 	for _, g := range []struct {
 		id, name string
 		members  []string
+		apps     int
+		profiles int
 	}{
-		{GroupPilot, "Pilot Users", []string{"alice", "bob", "dave"}},
-		{GroupField, "Field Staff", []string{"carol", "erin"}},
+		{GroupPilot, "Pilot Users", []string{"alice", "bob", "dave"}, 5, 3},
+		{GroupField, "Field Staff", []string{"carol", "erin"}, 2, 1},
 	} {
 		grp := s.newGroup(g.id, g.name)
+		grp.apps, grp.profiles = g.apps, g.profiles
 		for _, m := range g.members {
 			grp.members[m] = struct{}{}
 		}

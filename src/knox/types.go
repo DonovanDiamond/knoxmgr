@@ -81,6 +81,9 @@ type Group struct {
 	GroupName string `json:"groupName"`
 	GroupType string `json:"groupType"`
 	UserCount Count  `json:"userCount"`
+	// Assigned app/profile counts; Knox only sends them when needDeviceUserCount=yes.
+	AssignAppCount     Count `json:"assignAppCount"`
+	AssignProfileCount Count `json:"assignProfileCount"`
 }
 
 // GroupPage is one page of groups and the total match count.

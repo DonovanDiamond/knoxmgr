@@ -22,7 +22,7 @@ const (
 )
 
 // presetRegions are the server ids in docs/knox-api/km-api.yml.
-var presetRegions = []string{"ap01", "ap02", "eu01", "eu02", "eu03", "eu04", "eu05", "eu06", "eu07", "us01", "us02"}
+var presetRegions = []string{"ap01", "ap02", "ap03", "ap04", "ap05", "eu01", "eu02", "eu03", "eu04", "eu05", "eu06", "eu07", "eu08", "us01", "us02", "us03"}
 
 var (
 	knoxIDRe   = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,100}$`) // no '@': the OAuth client_id is clientId@tenantId

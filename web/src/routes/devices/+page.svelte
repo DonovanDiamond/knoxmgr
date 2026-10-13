@@ -55,21 +55,23 @@
 
 <BigTitle title="Devices" />
 
-<div class="relative mb-2">
-	<span class="muted absolute top-1/2 left-3 -translate-y-1/2"><Icon name="search" size={20} /></span>
-	<label class="sr-only" for="q">Search devices</label>
-	<input id="q" type="search" class="field !pl-10" placeholder="Search model, name, OS or user" autocomplete="off" bind:value={q} />
-</div>
+<div class="mb-3 flex flex-wrap items-center gap-2">
+	<div class="relative min-w-[16rem] flex-1">
+		<span class="muted absolute top-1/2 left-3 -translate-y-1/2"><Icon name="search" size={20} /></span>
+		<label class="sr-only" for="q">Search devices</label>
+		<input id="q" type="search" class="field !pl-10" placeholder="Search model, name, OS or user" autocomplete="off" bind:value={q} />
+	</div>
 
-<div class="mb-3 inline-flex max-w-full gap-1 rounded-full bg-base-200 p-1" role="group" aria-label="Filter devices">
-	{#each filters as [key, label] (key)}
-		<a
-			href="?filter={key}"
-			class="flex min-h-10 items-center rounded-full px-4 font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary {filter === key ? 'bg-base-100 text-primary shadow-sm' : 'text-[var(--muted)] hover:text-base-content'}"
-			aria-current={filter === key ? 'true' : undefined}
-			data-sveltekit-noscroll>{label}</a
-		>
-	{/each}
+	<div class="inline-flex max-w-full gap-1 rounded-full bg-base-200 p-1" role="group" aria-label="Filter devices">
+		{#each filters as [key, label] (key)}
+			<a
+				href="?filter={key}"
+				class="flex min-h-10 items-center rounded-full px-4 font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary {filter === key ? 'bg-base-100 text-primary shadow-sm' : 'text-[var(--muted)] hover:text-base-content'}"
+				aria-current={filter === key ? 'true' : undefined}
+				data-sveltekit-noscroll>{label}</a
+			>
+		{/each}
+	</div>
 </div>
 
 {#if loading}

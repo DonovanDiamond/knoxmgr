@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { ApiError } from '#lib/api/client';
-	import { createGroup, deleteGroup, listGroups } from '#lib/api/knox';
+	import { createGroup, listGroups } from '#lib/api/knox';
 	import { session } from '#lib/api/session.svelte';
 	import type { Group } from '#lib/api/types';
 	import KnoxOffline from '#components/KnoxOffline.svelte';
 	import { knoxStatus } from '#lib/health.svelte';
 	import BigTitle from '#components/BigTitle.svelte';
-	import ConfirmDelete from '#components/ConfirmDelete.svelte';
 	import Dialog from '#components/Dialog.svelte';
 	import Field from '#components/Field.svelte';
 	import Icon from '#components/Icon.svelte';
@@ -24,9 +23,6 @@
 	let newName = $state('');
 	let nameError = $state('');
 	let creating = $state(false);
-
-	let deleteOpen = $state(false);
-	let doomed = $state<Group | null>(null);
 
 	const isAdmin = $derived(session.user?.role === 'admin');
 	const adminOnly = 'Only admins create or delete groups.';
@@ -73,18 +69,6 @@
 		}
 	}
 
-	function askDelete(g: Group) {
-		doomed = g;
-		deleteOpen = true;
-	}
-
-	async function confirmDelete() {
-		if (!doomed) return;
-		await deleteGroup(doomed.groupId);
-		groups = groups.filter((g) => g.groupId !== doomed?.groupId);
-		toast.show(`Deleted ${doomed.groupName}`);
-	}
-
 	usePanel(() => ({
 		head: { value: groups.length, label: groups.length === 1 ? 'group' : 'groups' },
 		note: isAdmin ? '' : adminOnly,
@@ -122,9 +106,6 @@
 					<span class="nm !text-[20px]">{g.groupName}</span>
 					<span class="sub">{g.userCount} {g.userCount === 1 ? 'member' : 'members'}</span>
 				</a>
-				{#if isAdmin}
-					<button type="button" class="btn btn-quiet-danger !min-h-11 !px-3" aria-label="Delete group {g.groupName}" onclick={() => askDelete(g)}>Delete group</button>
-				{/if}
 				<span class="muted"><Icon name="chev" size={24} /></span>
 			</li>
 		{:else}
@@ -146,7 +127,3 @@
 		</div>
 	</form>
 </Dialog>
-
-<ConfirmDelete bind:open={deleteOpen} title="Delete group?" confirmKey={doomed?.groupName ?? ''} actionLabel="Delete group" onconfirm={confirmDelete}>
-	This permanently deletes the group <strong>{doomed?.groupName}</strong> in Knox. Its {doomed?.userCount ?? 0} members keep their accounts.
-</ConfirmDelete>

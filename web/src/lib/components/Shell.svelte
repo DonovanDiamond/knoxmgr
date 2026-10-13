@@ -44,7 +44,7 @@
 			? [...shell.panel.actions].sort((a, b) => Number(!!b.lead) - Number(!!a.lead))
 			: []
 	);
-	const kindClass = { primary: 'btn-primary', soft: 'btn-soft2', 'quiet-danger': 'btn-quiet-danger' };
+	const kindClass = { primary: 'btn-primary', soft: 'btn-soft2', 'quiet-danger': 'btn-quiet-danger', danger: 'btn-danger', 'outline-danger': 'btn-outline btn-error' };
 	const cls = (a: ShellAction) => kindClass[a.kind ?? 'soft'];
 </script>
 

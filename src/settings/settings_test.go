@@ -104,7 +104,7 @@ func TestKnoxValidation(t *testing.T) {
 }
 
 func TestPresetRegions(t *testing.T) {
-	want := "ap01 ap02 eu01 eu02 eu03 eu04 eu05 eu06 eu07 us01 us02"
+	want := "ap01 ap02 ap03 ap04 ap05 eu01 eu02 eu03 eu04 eu05 eu06 eu07 eu08 us01 us02 us03"
 	var ids []string
 	for _, r := range Regions() {
 		ids = append(ids, r.ID)

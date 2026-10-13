@@ -45,7 +45,8 @@ func orgsOfMirror(in []db.MirrorOrg) []knox.Organization {
 }
 
 func groupOfMirror(g db.MirrorGroup) knox.Group {
-	return knox.Group{GroupID: g.GroupID, GroupName: g.GroupName, GroupType: g.GroupType, UserCount: knox.Count(g.UserCount)}
+	return knox.Group{GroupID: g.GroupID, GroupName: g.GroupName, GroupType: g.GroupType, UserCount: knox.Count(g.UserCount),
+		AssignAppCount: knox.Count(g.AppCount), AssignProfileCount: knox.Count(g.ProfileCount)}
 }
 
 func groupsOfMirror(in []db.MirrorGroup) []knox.Group {

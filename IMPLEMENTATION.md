@@ -112,7 +112,7 @@ admins in the web UI, not in `config.yaml`. `src/settings.Manager` validates inp
 secrets, saves with an audit row, and applies the change live (no restart): it swaps in a new
 `knox.Client` and a new AD directory (`auth.Service.SetDirectory`).
 
-- **Knox**: `region` (a preset id `ap01`, `ap02`, `eu01`..`eu07`, `us01`, `us02`, or `custom`),
+- **Knox**: `region` (a preset id `ap01`..`ap05`, `eu01`..`eu08`, `us01`..`us03`, or `custom`),
   `baseURL`, `clientId`, `tenantId`, `clientSecret`, `allowInsecureHTTP`. A preset region fixes
   `baseURL` and forces `allowInsecureHTTP` off. A custom `baseURL` is an http(s) URL with no path,
   and plain `http` needs `allowInsecureHTTP`. The token URL is always `baseURL + /emm/oauth/token`
@@ -503,3 +503,10 @@ Taken from TASKS.md; TASKS.md labels only M1 and M2 explicitly, M3–M6 follow t
   mirror, write-through, `-listen`.
 
 Releasing: `git tag vX.Y.Z && git push --tags`
+
+## M12: group app and profile counts (backend only)
+
+- Migration `0008_group_assign_counts.sql` adds `knox_groups.app_count` and `profile_count` (default 0).
+- `knox.GroupQuery.WithCounts` sends `needDeviceUserCount=yes`; the sync fetches groups with it and `Mirror.ReplaceAll` stores the counts. Group JSON reuses the Knox names `assignAppCount` / `assignProfileCount`.
+- `knoxmock` returns them (seeded groups 5/3 and 2/1, new groups 0) only when `needDeviceUserCount=yes`.
+- Pending: web summary showing the counts.

@@ -5,6 +5,7 @@
 	import { createFirstAdmin, verifySetupCode } from '#lib/api/setup';
 	import Field from '#components/Field.svelte';
 	import HttpsWarning from '#components/HttpsWarning.svelte';
+	import KnoxCredentialsHelp from '#components/KnoxCredentialsHelp.svelte';
 	import KnoxForm from '#components/KnoxForm.svelte';
 
 	let step = $state<1 | 2 | 3 | 4>(1);
@@ -90,6 +91,7 @@
 		</form>
 	{:else if step === 3}
 		<p class="muted mb-5">Enter the API credentials of your Knox Manage tenant. You can also do this later in Admin settings.</p>
+		<KnoxCredentialsHelp />
 		<KnoxForm onsaved={() => (step = 4)}>
 			<button type="button" class="btn btn-soft2 sm:mr-auto" onclick={() => (step = 4)}>Skip for now</button>
 		</KnoxForm>

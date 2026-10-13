@@ -4,12 +4,13 @@
 - Answer → haiku-scout. Change → sonnet-coder. Never a coder for a question.
 - Verified / reported / missing are three different things. I never present the last two as the first.
 - Nobody waits. Over budget = one check, then kill, then re-read git state before re-dispatching.
-- Never re-run a suite that passed with no change since. Last tested: v0.7.0 — full go test ./... + npm check (Governor-run)
+- Never re-run a suite that passed with no change since. Last tested: v0.10.0 — full go test -count=1 ./... + npm check + windows vet (Governor-run)
 ### Decisions 2026-10-12 (answered)
 - Docker via DOCKER ?= sudo docker (9b42cf0). Tag only: v0.1.0 tagged, no push/remote. HSTS host only. Postgres test: not now. Group list count: keep Knox total.
 - Badge colour = stalest enrolled device (>24h yellow, >7d red); 0 devices = grey 0 badge; display name derived from first+last but editable; coordinators see devices of in-scope users only.
 - Versioning (user, 2026-10-12): commit and tag as we go; stay on v0.X, never v1. v0.2.0 = settings/sync/polish (3a2bb2c).
 ### Governor log
+- 2026-10-13 — region worker missed a second test enumerating regions (src/api); caught by M12, fixed in follow-up.
 - 2026-10-13 — M10 clean (6 coders, disjoint; orchestrator fixed a showMap reload bug in review).
 - 2026-10-12 — M8 polish worker recovered the mock Knox client secret of a scratchpad test data dir from an old session transcript (auto mode flagged it 'Credential Exploration'). Test-only mock credential; reported to user; future briefs: start fresh data dirs, never reuse.
 - 2026-10-12 — example/compose.yaml port changed to 8088 inside f5d0a90 (M6 had it as do-not-touch; host shows 8080+8088 in use, possibly user edit). Not reverted; docs aligned to 8088.
@@ -47,3 +48,13 @@
     b. Devices list: enrollment badge after the linked user name; filter Enrolled | Unenrolled | All, default Enrolled (kept in ?filter=). — devices/+page.svelte (+ API only if list is server-paged)
     c. Users list: hovering an avatar shows + (not selected) / − (selected) in the same style as the selected check mark. — users list files
     - Done: a/b/c + filter restyle (segmented control). Governor ran combined npm check 0/0; viewed single-point, devices list (before/after restyle), avatar minus shots. Not exercised: Enter/Space, period-change reset, dark mode. Blocked devices count as enrolled (API isEnrolled). Tagged v0.9.0 + pushed.
+21. [x] (2026-10-13) Knox credential how-to in setup Knox step (+ admin Knox settings). Lane 1. Facts from Samsung docs (Governor web check): Knox Manage > Advanced > EMM API > API Client > Add (Client ID, Password 8–30, Token Validity 1–3600 s, Permission Management/Read Only; max 5 active); tenant ID in Knox Admin Portal account icon menu (usually org domain); region from console URL. Tag v0.9.1 + push when done (standing 'tag and push like normal').
+22. [x] (2026-10-13) Group detail: multi-select members + bulk remove, same UI as users bulk select (Avatar toggle + selection panel). Lane 1 web-only (API removeMembers already takes a list). Tag+push with #21.
+    - Added (user): Groups list loses per-row Delete group buttons; detail page gets admin-only Delete group below Add members (confirm, back to /groups). Sent to the same coder (same files).
+23. [x] (2026-10-13) Knox region presets completed to 16 (ap01–05, eu01–08, us01–03) per spec. Lane 1.
+24. [x] (2026-10-13) Group screen: summary (members/apps/profiles counts) at top, then tabs Members (default) | Apps | Profiles listing apps + profiles assigned to the group. Lane 2 (Knox client + mock + API + web). Waits for #22 (same page). Scout: spec has no list of a group's apps/profiles, only counts (selectGroups needDeviceUserCount=yes → assignAppCount/assignProfileCount). User decision 2026-10-13: no tabs; summary of member/app/profile counts at top, rest of view = members.
+25. [x] (2026-10-13) Devices list: Enrolled/Unenrolled/All filter to the right of the search box (not below). Lane 1.
+    - User 2026-10-13: away a few hours, tag+push like normal when done, no questions, summary at end.
+    - Done: worker npm check 0/0; Governor viewed desktop shot.
+    - #21/#22 done: help panel (setup + admin knox, README); group bulk remove (one DELETE with userIds list, worker-reported network line) + Delete group moved to detail panel (admin, ConfirmDelete). Governor viewed setup-help, group selection + after-remove shots. Delete group not exercised end to end. M12 (group counts backend) running.
+    - #24 done: M12 backend (migration 0008, sync needDeviceUserCount=yes, fields assignAppCount/assignProfileCount) + summary on group page; region test fixed (16). Governor: full go test pass, npm check 0/0, viewed group summary shot. Tagged v0.10.0 + pushed.

@@ -11,7 +11,7 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 - DB: pure-Go SQLite, or Postgres. Browser talks plain HTTP to the binary; TLS is at a proxy.
 - Auth: local accounts (bcrypt) or Active Directory (bind as the user). Ed25519 JWT access token + rotating refresh cookie.
 - Knox client (`src/knox`) talks to the tenant; `src/knoxmock` is an in-memory fake of it for development and tests.
-- `sync.Scheduler` copies Knox into the mirror at start-up, on an interval, after Knox settings are saved, and on admin request; one run at a time, a failed run leaves the mirror unchanged. Reads come from the mirror; writes go to Knox first, then patch the mirror.
+- `sync.Scheduler` copies Knox into the mirror at start-up, on an interval, after Knox settings are saved, and on admin request; one run at a time, a failed run leaves the mirror unchanged. Reads come from the mirror; writes go to Knox first, then patch the mirror. Groups also carry Knox-reported assigned app/profile counts (`knox_groups.app_count`, `profile_count`, set by the sync); Knox has no API listing a group's apps or profiles. The group detail screen shows the counts, bulk remove of selected members, and (admin) Delete group; the groups list only lists.
 - Every authenticated request re-loads the app account from the DB; org scope is resolved from the mirror (`Mirror.SubOrgCodes`) per request.
 
 ## Module map

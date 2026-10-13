@@ -34,6 +34,7 @@ func (s *Server) selectGroups(w http.ResponseWriter, r *http.Request) {
 			if counts {
 				n := len(g.members)
 				v.UserCount = &n
+				v.AppCount, v.ProfileCount = &g.apps, &g.profiles
 			}
 			out = append(out, v)
 		}

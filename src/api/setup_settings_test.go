@@ -286,7 +286,7 @@ func TestKnoxSettingsEndpoints(t *testing.T) {
 	var got map[string]any
 	decode(t, do(t, e.app, "GET", "/api/admin/settings/knox", "", a), &got)
 	regions, _ := got["regions"].([]any)
-	if got["secretSet"] != true || got["configured"] != true || len(regions) != 11 {
+	if got["secretSet"] != true || got["configured"] != true || len(regions) != 16 {
 		t.Fatalf("GET = %v", got)
 	}
 	if _, has := got["clientSecret"]; has {

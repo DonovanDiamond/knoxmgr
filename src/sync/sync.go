@@ -195,7 +195,7 @@ func fetch(ctx context.Context, k *knox.Client) (db.Snapshot, error) {
 		return snap, fmt.Errorf("users: %w", err)
 	}
 	groups, err := collect(func(start int) ([]knox.Group, int, error) {
-		pg, err := k.SelectGroups(ctx, knox.GroupQuery{Start: start, Limit: pageSize})
+		pg, err := k.SelectGroups(ctx, knox.GroupQuery{Start: start, Limit: pageSize, WithCounts: true})
 		return pg.Groups, int(pg.Total), err
 	})
 	if err != nil {
@@ -226,7 +226,8 @@ func fetch(ctx context.Context, k *knox.Client) (db.Snapshot, error) {
 		if g.GroupType != "USER" {
 			continue
 		}
-		snap.Groups = append(snap.Groups, db.MirrorGroup{GroupID: g.GroupID, GroupName: g.GroupName, GroupType: g.GroupType})
+		snap.Groups = append(snap.Groups, db.MirrorGroup{GroupID: g.GroupID, GroupName: g.GroupName, GroupType: g.GroupType,
+			AppCount: int(g.AssignAppCount), ProfileCount: int(g.AssignProfileCount)})
 		members, err := collect(func(start int) ([]knox.User, int, error) {
 			pg, err := k.SelectGroupUsers(ctx, g.GroupID, start, pageSize)
 			return pg.Users, int(pg.Total), err

@@ -63,10 +63,11 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | schema | `src/db/migrations/0004_knox_mirror.sql` | `knox_orgs`, `knox_users`, `knox_groups`, `knox_group_members`, `knox_devices` (mirror, `synced_at` on each) and `sync_runs` |
 | schema | `src/db/migrations/0006_update_check.sql` | `general_settings.check_updates` (0/1, default 1) |
 | schema | `src/db/migrations/0007_show_map.sql` | `general_settings.show_map` (0/1, default 1) |
+| schema | `src/db/migrations/0008_group_assign_counts.sql` | `knox_groups.app_count`, `profile_count` (Knox-reported assigned apps / profiles, default 0) |
 | schema | `src/db/migrations/0005_device_cache.sql` | `knox_device_cache` (`device_id`, `kind`, `payload` JSON, `fetched_at`; primary key device+kind) |
 | `DeviceCacheEntry`, `DeviceCache`, `PutDeviceCache` | `src/db/device_cache.go` | read / upsert the last live Knox answer of a kind for a device (`ErrNotFound` when none); `ReplaceAll` also prunes rows of dropped devices |
 | `Mirror`, `NewMirror`, `Snapshot`, `MirrorOrg`, `MirrorUser`, `MirrorGroup`, `MirrorMember`, `MirrorDevice` | `src/db/mirror.go` | mirror repository and row types |
-| `ReplaceAll`, `recountGroups` | `src/db/mirror.go` | replace the whole mirror from a `Snapshot` in one transaction; group user counts recomputed |
+| `ReplaceAll`, `recountGroups` | `src/db/mirror.go` | replace the whole mirror from a `Snapshot` in one transaction; group user counts recomputed; `MirrorGroup` carries `AppCount` / `ProfileCount`, stored as given by `ReplaceAll` |
 | `Orgs`, `SubOrgCodes`, `Users`, `User`, `Groups`, `Group`, `GroupMembers`, `UserGroups`, `Devices`, `Device`, `DevicesOfUsers`, `selectScoped` | `src/db/mirror.go` | reads; `orgs` arg nil = unrestricted, empty = nothing, else `org_code IN`; `SubOrgCodes` is a recursive query |
 | `UpsertUser`, `DeleteUser`, `UpsertGroup`, `DeleteGroup`, `AddMembers`, `RemoveMembers`, `changeMembers` | `src/db/mirror.go` | write-through patches after Knox accepted a change |
 | `SyncRun`, `SyncCounts`, `StartRun`, `FinishRun`, `RecentRuns`, `LastSuccess` | `src/db/mirror.go` | `sync_runs` history |
@@ -127,6 +128,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `Device`, `DevicePage`, `DeviceQuery`, `SelectDeviceList`, `SelectDeviceInfo`, `SelectDevicesByUser` | `src/knox/devices.go`, `src/knox/types.go` | device operations; `SelectDevicesByUser` assumes a `devicelist` wrapper |
 | `DeviceDetail`, `DeviceApp`, `DeviceLocation`, `SelectDeviceDetail`, `SelectDeviceAppList`, `SelectDeviceLocation`, `SelectDeviceLocationHistory`, `requireDeviceID` | `src/knox/device_detail.go` | live per-device calls (send `deviceId` only); history takes whole days (`period`), rounded up; Knox has no agent/client version, so `AgentProfileName`/`ClientProfileName` are used |
 | `UserQuery`, `UserInput`, `SelectUsers`, `SelectUserWithID`, `CreateUser`, `UpdateUser`, `PurgeUser`, `RequestEnrollment`, `EnrollmentResult` | `src/knox/users.go` | user operations |
+| `GroupQuery.WithCounts` | `src/knox/groups.go` | sends `needDeviceUserCount=yes`; the sync fetches groups with it to get `assignAppCount` / `assignProfileCount` |
 | `GroupQuery`, `SelectGroups`, `InsertGroup`, `DeleteGroup`, `SelectGroupUsers`, `InsertGroupUnits`, `DeleteGroupUnits`, `groupUnits` | `src/knox/groups.go` | USER group operations and membership |
 | `Probe`, `ProbeError`, `tokenStatusError`, `transportFailure` | `src/knox/probe.go` | connection test: token, then one org list; failures in words fit for an admin, no URLs or secrets |
 | `SelectOrgList`, `SelectOrg`, `SelectOrgUsers`, `Orgs`, `SubOrgCodes` | `src/knox/orgs.go` | `Orgs` is the exported cached (60s) org list, used by `GET /api/knox/orgs` and `SubOrgCodes`; `SubOrgCodes` is an org plus descendants |
@@ -160,7 +162,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `seedDevices`, `device`, `deviceView`, `deviceViews` | `src/knoxmock/data.go` | 6 seeded devices covering every freshness band, an unassigned and a non-enrolled one |
 | `selectDeviceAppList`, `selectDeviceLocation`, `selectDeviceLocationHistory`, `knownDevice` | `src/knoxmock/handlers_device.go` | live device endpoints; `period` 1-30 days, `knownDevice` resolves `deviceId` or writes the error |
 | `deviceApps`, `locationHistory`, `locationDays` | `src/knoxmock/data.go` | generated apps and location trail per device (30 days back) |
-| `selectGroups`, `insertGroup`, `deleteGroup`, `selectGroupUsers`, `insertGroupUnits`, `deleteGroupUnits`, `changeUnits` | `src/knoxmock/handlers_group.go` | group endpoints |
+| `selectGroups`, `insertGroup`, `deleteGroup`, `selectGroupUsers`, `insertGroupUnits`, `deleteGroupUnits`, `changeUnits` | `src/knoxmock/handlers_group.go` | group endpoints; with `needDeviceUserCount=yes` each group also carries `assignAppCount` / `assignProfileCount` (seeded 5/3 and 2/1, new groups 0) |
 | `orgSelectList`, `orgSelect`, `orgSelectUsers` | `src/knoxmock/handlers_org.go` | org endpoints |
 
 ## src/api
@@ -261,8 +263,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | user detail | `web/src/routes/users/[id]/+page.svelte` | view, edit, invite, delete |
 | devices list | `web/src/routes/devices/+page.svelte` | device list, search, freshness badge per device |
 | device detail | `web/src/routes/devices/[id]/+page.svelte` | one device: mirror data, live info and profiles, `DeviceApps`, `DeviceLocation` (when `canViewLocation`) |
-| groups list | `web/src/routes/groups/+page.svelte` | group list |
-| group detail | `web/src/routes/groups/[id]/+page.svelte` | group members |
+| groups list | `web/src/routes/groups/+page.svelte` | group list (create for admins; delete lives on the group detail screen) |
+| group detail | `web/src/routes/groups/[id]/+page.svelte` | Members / Apps / Profiles counts summary; members with avatar select and "Remove from group (N)"; Add members; Delete group (admin) |
 | admin page | `web/src/routes/admin/+page.svelte` | app accounts and audit log |
 | setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code (prefilled from the `#code=` fragment by the desktop app, then stripped with `history.replaceState`), admin, Knox (skippable), done |
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |

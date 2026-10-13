@@ -15,8 +15,9 @@ const groupTypeUser = "USER"
 type GroupQuery struct {
 	GroupID    string
 	SearchName string
-	Start      int // >= 0
-	Limit      int // 1..1000; 0 lets Knox default to 1000
+	Start      int  // >= 0
+	Limit      int  // 1..1000; 0 lets Knox default to 1000
+	WithCounts bool // also ask Knox for the assigned app/profile counts
 }
 
 // SelectGroups lists user groups (GET /group/selectGroups).
@@ -29,6 +30,9 @@ func (c *Client) SelectGroups(ctx context.Context, q GroupQuery) (GroupPage, err
 	set(f, "searchName", q.SearchName)
 	if q.Limit > 0 {
 		f.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.WithCounts {
+		f.Set("needDeviceUserCount", "yes")
 	}
 	type result struct {
 		Groups []Group `json:"groups"`

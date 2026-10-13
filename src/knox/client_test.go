@@ -236,6 +236,10 @@ func TestFormEncoding(t *testing.T) {
 			_, err := c.SelectGroups(ctx, GroupQuery{SearchName: "g"})
 			return err
 		}, "GET", "/group/selectGroups", url.Values{"groupType": {"USER"}, "searchName": {"g"}, "start": {"0"}}},
+		{"selectGroups with counts", func(c *Client) error {
+			_, err := c.SelectGroups(ctx, GroupQuery{WithCounts: true})
+			return err
+		}, "GET", "/group/selectGroups", url.Values{"groupType": {"USER"}, "needDeviceUserCount": {"yes"}, "start": {"0"}}},
 		{"insertGroup", func(c *Client) error {
 			_, err := c.InsertGroup(ctx, "Team A", []string{"u1", "u2"})
 			return err
@@ -308,7 +312,7 @@ func TestResponseDecoding(t *testing.T) {
 		case "/emm/oapi/user/selectUsers":
 			ok(w, `{"users":{"user":[{"userId":"u1","orgCode":"o1","enabled":"1"}],"total":7}}`)
 		case "/emm/oapi/group/selectGroups":
-			ok(w, `{"groups":[{"groupId":"g1","groupName":"A","userCount":3}],"total":"1"}`)
+			ok(w, `{"groups":[{"groupId":"g1","groupName":"A","userCount":3,"assignAppCount":"4","assignProfileCount":5}],"total":"1"}`)
 		case "/emm/oapi/group/deleteGroup":
 			ok(w, `{"deleteGroupResp":{"failCount":1,"failMessages":["in use"]}}`)
 		}
@@ -318,7 +322,7 @@ func TestResponseDecoding(t *testing.T) {
 		t.Errorf("users = %+v, %v", up, err)
 	}
 	gp, err := c.SelectGroups(ctx, GroupQuery{})
-	if err != nil || len(gp.Groups) != 1 || gp.Groups[0].UserCount != 3 || gp.Total != 1 {
+	if err != nil || len(gp.Groups) != 1 || gp.Groups[0].UserCount != 3 || gp.Groups[0].AssignAppCount != 4 || gp.Groups[0].AssignProfileCount != 5 || gp.Total != 1 {
 		t.Errorf("groups = %+v, %v", gp, err)
 	}
 	var ke *Error

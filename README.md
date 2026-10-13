@@ -31,9 +31,22 @@ Then:
 2. Copy the one-time setup code from the log (the line `first-run setup code`; with Docker,
    `docker compose logs knoxmgr`) into the setup page.
 3. Create the first admin account.
-4. Enter your Knox details: region, client ID, tenant ID and client secret. Create these in the
-   Knox Manage console under Settings > API / Open API (see the Samsung Knox docs; the exact menu
-   may differ).
+4. Enter your Knox details (the setup page has a "How do I get these?" panel with the same steps):
+   1. Sign in to the [Knox Admin Portal](https://www.samsungknox.com) and open Knox Manage. The
+      browser address shows your region server, e.g. `https://eu02.manage.samsungknox.com`: that is
+      the region/URL to use.
+   2. In Knox Manage go to **Advanced > EMM API > API Client** and click **Add**.
+   3. Client ID: any unique name (e.g. `knoxmgr`). Password: 8-30 characters with letters, numbers
+      and special characters; this is the client secret. Token Validity(sec): up to 3600. API
+      Permission Level: Management (Read Only works for viewing only; creating users, invitations
+      and group changes need Management). Save.
+   4. Make sure the client is Active (only five API clients can be active; select it and click
+      **Change status** if needed).
+   5. Tenant ID: in the Knox Admin Portal, open the account icon menu (top right); the Knox Manage
+      tenant ID is shown there (usually your organisation's domain, sometimes with a prefix).
+   6. Enter client ID, tenant ID and client secret (knoxmgr joins them as `clientId@tenantId`).
+
+   See [Samsung docs: Manage API clients](https://docs.samsungknox.com/admin/knox-manage/original-console/appendix/manage-open-api/manage-api-clients/).
 5. Click **Test**, then **Save**. Done.
 
 knoxmgr speaks plain HTTP. For real use put a TLS reverse proxy in front. For plain HTTP only, add
@@ -113,6 +126,10 @@ memberships and devices. A sync runs every 15 minutes by default (a general sett
 run one at any time with **Sync now** under `/admin/settings/general`. Screens read from the mirror;
 every change is sent to Knox first. knoxmgr also stores its own application accounts, refresh tokens,
 settings and an audit log. It does not manage device groups or the organization tree.
+
+The group screen opens with Members, Apps and Profiles counts (apps and profiles as assigned in Knox at the last
+sync). Tap member avatars to select them and use **Remove from group (N)** to remove several at once. Admins
+delete a group from its own screen, not from the groups list.
 
 The device screen also shows live details, installed apps and (admins and write users only) location
 from Knox, with the last answer kept for when Knox is unreachable. Location is drawn on an embedded

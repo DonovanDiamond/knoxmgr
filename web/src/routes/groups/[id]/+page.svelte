@@ -1,11 +1,13 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api/client';
-	import { addMembers, getGroup, listMembers, listUsers, removeMembers } from '#lib/api/knox';
+	import { addMembers, deleteGroup, getGroup, listMembers, listUsers, removeMembers } from '#lib/api/knox';
 	import { session } from '#lib/api/session.svelte';
 	import type { Group, KnoxUser } from '#lib/api/types';
 	import Avatar from '#components/Avatar.svelte';
 	import BigTitle from '#components/BigTitle.svelte';
+	import ConfirmDelete from '#components/ConfirmDelete.svelte';
 	import DeviceBadge from '#components/DeviceBadge.svelte';
 	import Dialog from '#components/Dialog.svelte';
 	import Note from '#components/Note.svelte';
@@ -30,6 +32,13 @@
 	let pq = $state('');
 	let adding = $state(false);
 	const picked = new SvelteSet<string>();
+
+	const selected = new SvelteSet<string>();
+	let confirmOpen = $state(false);
+	let removing = $state(false);
+	let deleteOpen = $state(false);
+	const isAdmin = $derived(session.user?.role === 'admin');
+	const selectedUsers = $derived(members.filter((m) => selected.has(m.userId)));
 
 	const access = $derived(accessOf(session.user, orgs.name(session.user?.orgCode)));
 	const scopeName = $derived(orgs.name(access.scopeOrg));
@@ -75,6 +84,36 @@
 		}
 	}
 
+	function toggle(userId: string) {
+		if (selected.has(userId)) selected.delete(userId);
+		else selected.add(userId);
+	}
+
+	async function removeSelected() {
+		const ids = selectedUsers.map((m) => m.userId);
+		removing = true;
+		actionError = '';
+		try {
+			await removeMembers(id, ids);
+			confirmOpen = false;
+			selected.clear();
+			toast.show(`Removed ${ids.length} from ${title}`);
+			members = await listMembers(id);
+		} catch (e) {
+			confirmOpen = false;
+			actionError = e instanceof ApiError ? e.message : 'Could not reach the server.';
+			toast.show('Members were not removed');
+		} finally {
+			removing = false;
+		}
+	}
+
+	async function confirmDelete() {
+		await deleteGroup(id);
+		toast.show(`Deleted ${title}`);
+		goto('/groups');
+	}
+
 	async function openPicker() {
 		pq = '';
 		picked.clear();
@@ -112,10 +151,20 @@
 	}
 
 	usePanel(() => ({
-		head: { value: members.length, label: members.length === 1 ? 'member shown' : 'members shown' },
-		note: access.canWrite ? '' : access.reason,
+		head: selected.size
+			? { value: selected.size, label: 'selected' }
+			: { value: members.length, label: members.length === 1 ? 'member shown' : 'members shown' },
+		note: access.canWrite ? (selected.size ? '' : 'Tap an avatar to select members to remove.') : access.reason,
 		lock: !access.canWrite,
-		actions: [{ label: 'Add members', kind: 'primary', onclick: openPicker, disabled: !access.canWrite || !group, reason: access.reason }]
+		actions: selected.size
+			? [
+					{ label: `Remove from group (${selected.size})`, kind: 'danger', lead: true, onclick: () => (confirmOpen = true), disabled: removing },
+					{ label: 'Clear selection', kind: 'soft', onclick: () => selected.clear() }
+				]
+			: [
+					{ label: 'Add members', kind: 'primary', onclick: openPicker, disabled: !access.canWrite || !group, reason: access.reason },
+					...(isAdmin ? [{ label: 'Delete group', kind: 'outline-danger' as const, onclick: () => (deleteOpen = true), disabled: !group }] : [])
+				]
 	}));
 </script>
 
@@ -138,11 +187,23 @@
 	{/if}
 	{#if actionError}<div class="note warn my-3" role="alert"><span>{actionError}</span></div>{/if}
 
+	{#if group}
+		<div class="mb-3 flex flex-wrap gap-x-8 gap-y-2">
+			{#each [['Members', group.userCount], ['Apps', group.assignAppCount], ['Profiles', group.assignProfileCount]] as [label, n] (label)}
+				<div>
+					<p class="text-[28px] leading-none font-extrabold tracking-tight">{n}</p>
+					<p class="muted mt-1 text-[15px]">{label}</p>
+				</div>
+			{/each}
+		</div>
+		<p class="muted mb-2 text-[14px]">Apps and profiles assigned in Knox, as of last sync.</p>
+	{/if}
+
 	<p class="muted py-2 text-[15px]" aria-live="polite">{members.length} {members.length === 1 ? 'member' : 'members'} shown</p>
 	<ul>
 		{#each members as u (u.userId)}
 			<li class="row row-hover">
-				<Avatar name={displayName(u)} seed={u.userId} small />
+				<Avatar name={displayName(u)} seed={u.userId} selected={selected.has(u.userId)} onclick={access.canWrite ? () => toggle(u.userId) : undefined} />
 				<span class="rowmain">
 					<span class="nm">{displayName(u)}</span>
 					<span class="sub">{u.orgName || orgs.name(u.orgCode)}</span>
@@ -164,6 +225,17 @@
 		{/each}
 	</ul>
 {/if}
+
+<Dialog bind:open={confirmOpen} title="Remove {selectedUsers.length} {selectedUsers.length === 1 ? 'member' : 'members'}?">
+	<p class="muted mt-1">
+		{selectedUsers.slice(0, 5).map(displayName).join(', ')}{selectedUsers.length > 5 ? ` and ${selectedUsers.length - 5} more` : ''}
+		will be removed from {title} in Knox.
+	</p>
+	<div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+		<button type="button" class="btn btn-soft2" onclick={() => (confirmOpen = false)}>Cancel</button>
+		<button type="button" class="btn btn-danger" disabled={removing} onclick={removeSelected}>Remove from group</button>
+	</div>
+</Dialog>
 
 <Dialog bind:open={pickerOpen} title="Add members">
 	<p class="muted mt-1">to {title}{scopeName ? `. You can add people in ${scopeName} and its sub-organizations.` : ''}</p>
@@ -197,3 +269,7 @@
 		</button>
 	</div>
 </Dialog>
+
+<ConfirmDelete bind:open={deleteOpen} title="Delete group?" confirmKey={title} actionLabel="Delete group" onconfirm={confirmDelete}>
+	This permanently deletes the group <strong>{title}</strong> in Knox. Its {group?.userCount ?? members.length} members keep their accounts.
+</ConfirmDelete>

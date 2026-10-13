@@ -16,7 +16,7 @@ func mirrorSnapshot() Snapshot {
 			{UserID: "u2", UserName: "two", OrgCode: "a1"},
 			{UserID: "u3", UserName: "three", OrgCode: "b"},
 		},
-		Groups:  []MirrorGroup{{GroupID: "g1", GroupName: "G1", GroupType: "USER", UserCount: 99}, {GroupID: "g2", GroupName: "G2"}},
+		Groups:  []MirrorGroup{{GroupID: "g1", GroupName: "G1", GroupType: "USER", UserCount: 99, AppCount: 4, ProfileCount: 2}, {GroupID: "g2", GroupName: "G2"}},
 		Members: []MirrorMember{{"g1", "u1"}, {"g1", "u2"}, {"g1", "u3"}},
 		Devices: []MirrorDevice{
 			{DeviceID: "d1", DeviceModel: "M", UserID: "u2", OrgCode: "stale"},
@@ -50,6 +50,33 @@ func deviceIDs(ds []MirrorDevice) []string {
 		ids = append(ids, d.DeviceID)
 	}
 	return ids
+}
+
+func TestMirrorGroupCountsRoundTrip(t *testing.T) {
+	m, ctx := newMirror(t)
+	if err := m.UpsertGroup(ctx, MirrorGroup{GroupID: "g1", GroupName: "Renamed", GroupType: "USER"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.UpsertGroup(ctx, MirrorGroup{GroupID: "g3", GroupName: "New", GroupType: "USER"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id        string
+		app, prof int
+	}{{"g1", 4, 2}, {"g2", 0, 0}, {"g3", 0, 0}} {
+		g, err := m.Group(ctx, tc.id)
+		if err != nil || g.AppCount != tc.app || g.ProfileCount != tc.prof {
+			t.Errorf("%s = %+v, %v; want counts %d/%d", tc.id, g, err, tc.app, tc.prof)
+		}
+	}
+	ugs, _ := m.UserGroups(ctx, "u1")
+	if len(ugs) != 1 || ugs[0].AppCount != 4 || ugs[0].ProfileCount != 2 {
+		t.Errorf("UserGroups = %+v", ugs)
+	}
+	all, _ := m.Groups(ctx)
+	if len(all) != 3 || all[2].GroupID != "g1" || all[2].AppCount != 4 {
+		t.Errorf("Groups = %+v", all)
+	}
 }
 
 func TestMirrorReplaceAllDropsAbsentRows(t *testing.T) {

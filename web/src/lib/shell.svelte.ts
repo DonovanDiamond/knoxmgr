@@ -5,7 +5,7 @@ export type ChipTone = 'noemail' | 'plain';
 export interface ShellAction {
 	label: string;
 	onclick: () => void;
-	kind?: 'primary' | 'soft' | 'quiet-danger';
+	kind?: 'primary' | 'soft' | 'quiet-danger' | 'danger' | 'outline-danger';
 	disabled?: boolean;
 	/** Tooltip on a disabled action: why it is unavailable. */
 	reason?: string;

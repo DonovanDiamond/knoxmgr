@@ -3,6 +3,7 @@ package knoxmock
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -363,4 +364,40 @@ func TestConcurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestSelectGroupsAssignCounts(t *testing.T) {
+	tests := []struct {
+		name string
+		form url.Values
+		want string
+	}{
+		{"with flag", url.Values{"groupId": {GroupPilot}, "needDeviceUserCount": {"yes"}}, "5/3"},
+		{"with flag, second group", url.Values{"groupId": {GroupField}, "needDeviceUserCount": {"yes"}}, "2/1"},
+		{"without flag", url.Values{"groupId": {GroupPilot}}, "absent"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			g := e.value("GET", "/emm/oapi/group/selectGroups", tc.form)["groups"].([]any)[0].(map[string]any)
+			a, hasA := g["assignAppCount"].(float64)
+			p, hasP := g["assignProfileCount"].(float64)
+			got := "absent"
+			if hasA && hasP {
+				got = fmt.Sprintf("%d/%d", int(a), int(p))
+			}
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewGroupAssignCountsZero(t *testing.T) {
+	e := newEnv(t)
+	e.value("POST", "/emm/oapi/group/insertGroup", url.Values{"groupName": {"Fresh"}, "groupType": {"USER"}})
+	g := e.value("GET", "/emm/oapi/group/selectGroups", url.Values{"searchName": {"Fresh"}, "needDeviceUserCount": {"yes"}})["groups"].([]any)[0].(map[string]any)
+	if g["assignAppCount"] != float64(0) || g["assignProfileCount"] != float64(0) {
+		t.Errorf("new group counts = %v/%v, want 0/0", g["assignAppCount"], g["assignProfileCount"])
+	}
 }

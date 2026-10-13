@@ -38,6 +38,9 @@ type MirrorGroup struct {
 	GroupName string `db:"group_name"`
 	GroupType string `db:"group_type"`
 	UserCount int    `db:"user_count"`
+	// Assigned app and profile counts as reported by Knox.
+	AppCount     int `db:"app_count"`
+	ProfileCount int `db:"profile_count"`
 }
 
 type MirrorMember struct {
@@ -126,8 +129,8 @@ func (m *Mirror) ReplaceAll(ctx context.Context, s Snapshot, syncedAt time.Time)
 		}
 	}
 	for _, g := range s.Groups {
-		if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO knox_groups (group_id, group_name, group_type, synced_at) VALUES (?, ?, ?, ?)`),
-			g.GroupID, g.GroupName, g.GroupType, at); err != nil {
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO knox_groups (group_id, group_name, group_type, app_count, profile_count, synced_at) VALUES (?, ?, ?, ?, ?, ?)`),
+			g.GroupID, g.GroupName, g.GroupType, g.AppCount, g.ProfileCount, at); err != nil {
 			return fmt.Errorf("inserting group: %w", err)
 		}
 	}
@@ -219,13 +222,13 @@ func (m *Mirror) User(ctx context.Context, id string) (MirrorUser, error) {
 
 func (m *Mirror) Groups(ctx context.Context) ([]MirrorGroup, error) {
 	out := []MirrorGroup{}
-	err := m.db.SelectContext(ctx, &out, `SELECT group_id, group_name, group_type, user_count FROM knox_groups ORDER BY group_name, group_id`)
+	err := m.db.SelectContext(ctx, &out, `SELECT group_id, group_name, group_type, user_count, app_count, profile_count FROM knox_groups ORDER BY group_name, group_id`)
 	return out, err
 }
 
 func (m *Mirror) Group(ctx context.Context, id string) (MirrorGroup, error) {
 	var g MirrorGroup
-	err := m.db.GetContext(ctx, &g, m.db.Rebind(`SELECT group_id, group_name, group_type, user_count FROM knox_groups WHERE group_id = ?`), id)
+	err := m.db.GetContext(ctx, &g, m.db.Rebind(`SELECT group_id, group_name, group_type, user_count, app_count, profile_count FROM knox_groups WHERE group_id = ?`), id)
 	return g, notFound(err)
 }
 
@@ -239,7 +242,7 @@ func (m *Mirror) GroupMembers(ctx context.Context, groupID string, orgs []string
 
 func (m *Mirror) UserGroups(ctx context.Context, userID string) ([]MirrorGroup, error) {
 	out := []MirrorGroup{}
-	err := m.db.SelectContext(ctx, &out, m.db.Rebind(`SELECT g.group_id, g.group_name, g.group_type, g.user_count FROM knox_groups g
+	err := m.db.SelectContext(ctx, &out, m.db.Rebind(`SELECT g.group_id, g.group_name, g.group_type, g.user_count, g.app_count, g.profile_count FROM knox_groups g
 		JOIN knox_group_members gm ON gm.group_id = g.group_id WHERE gm.user_id = ? ORDER BY g.group_name, g.group_id`), userID)
 	return out, err
 }
@@ -306,7 +309,8 @@ func (m *Mirror) DeleteUser(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
-// UpsertGroup writes name and type; user_count is left to the membership rows.
+// UpsertGroup writes name and type; user_count is left to the membership rows and the
+// app/profile counts to the sync, so an update never zeroes them (a new group starts at 0).
 func (m *Mirror) UpsertGroup(ctx context.Context, g MirrorGroup) error {
 	_, err := m.db.ExecContext(ctx, m.db.Rebind(`INSERT INTO knox_groups (group_id, group_name, group_type, synced_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT (group_id) DO UPDATE SET group_name = excluded.group_name, group_type = excluded.group_type, synced_at = excluded.synced_at`),

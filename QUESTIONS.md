@@ -402,3 +402,10 @@ replacing the earlier "no embedded map" default.
 - Secure cookies stay on: browsers accept `Secure` cookies on loopback.
 - If WebView2 is missing it falls back to the default browser with a message box; OK stops the server.
 - Library: `github.com/jchv/go-webview2`, CGO-free through go-winloader, latest module time 2026-02-05. Chosen over the Wails WebView2 loader. Not tested on real Windows yet.
+
+## Group app and profile counts (M12)
+
+- Counts come only from the sync, so they are as fresh as the sync interval; write-through does not refresh them.
+- The API reuses Knox's `assignAppCount` / `assignProfileCount` because group JSON already reuses the `knox.Group` shape (like `userCount`), rather than inventing `appCount` / `profileCount`.
+- Content counts are ignored (out of scope).
+- The member count stays the mirror-computed `userCount`.
