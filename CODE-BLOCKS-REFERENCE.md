@@ -7,10 +7,26 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 
 | Block | File | Purpose |
 |---|---|---|
-| `main`, `run` | `cmd/knoxmgr/main.go` | parse flags (`-config`, `-data`, `-listen` / `KNOXMGR_LISTEN`, `-create-admin`), resolve data dir, wire config/db/auth/secretbox/settings/mirror/sync/api (`SetHooks`, `go Scheduler.Start`), create the setup code, listen with graceful shutdown |
-| `version` | `cmd/knoxmgr/main.go` | build version (default `dev`) set by `-ldflags -X main.version`; passed to `update.New` and `Deps.Version` |
-| `createLocalAdmin` | `cmd/knoxmgr/main.go` | `-create-admin`: create a local admin and audit it, then exit |
-| `adminPassword` | `cmd/knoxmgr/main.go` | password from `KNOXMGR_ADMIN_PASSWORD`, no-echo prompt, or piped line |
+| `main`, `run` | `cmd/knoxmgr/main.go` | parse flags (`-config`, `-data`, `-listen` / `KNOXMGR_LISTEN`, `-create-admin`), resolve data dir, call `server.Run` with graceful shutdown on signal |
+| `version` | `cmd/knoxmgr/main.go` | build version (default `dev`) set by `-ldflags -X main.version`; passed as `server.Options.Version` |
+
+## cmd/knoxmgr-desktop
+
+| Block | File | Purpose |
+|---|---|---|
+| `main`, `run` | `cmd/knoxmgr-desktop/main.go` | windows build tag; lock, log file, loopback listener, `server.Run`, WebView2 window, shutdown; errors shown in a message box |
+| `version` | `cmd/knoxmgr-desktop/main.go` | build version set by `-ldflags -X main.version` |
+| `acquireLock` | `cmd/knoxmgr-desktop/main.go` | open `knoxmgr-desktop.lock` with share mode 0; a second process gets a sharing violation |
+| `msgBox`, `openBrowser` | `cmd/knoxmgr-desktop/main.go` | message box; default-browser fallback when WebView2 is missing |
+
+## src/server
+
+| Block | File | Purpose |
+|---|---|---|
+| `Options` | `src/server/server.go` | config path, data dir, listen address or `Listener`, version, `CreateAdmin`, `OnReady(setupCode)` (when set, the setup code is not logged) |
+| `Run` | `src/server/server.go` | load config, open db, migrate, build services (auth, settings, mirror, sync, update), create the setup code, serve until the context ends |
+| `createLocalAdmin` | `src/server/server.go` | `-create-admin`: create a local admin and audit it, then return |
+| `adminPassword` | `src/server/server.go` | password from `KNOXMGR_ADMIN_PASSWORD`, no-echo prompt, or piped line |
 
 ## cmd/knoxmock
 
@@ -192,6 +208,13 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | stage `knoxmock` | `Dockerfile` | image with only `knoxmock`, `EXPOSE 9090` |
 | stage `knoxmgr` | `Dockerfile` | last stage (default for plain `docker build`): `knoxmgr`, and `/var/lib/knoxmgr` as working dir and volume (data dir `data/` beneath it) |
 
+## Release build
+
+| Block | File | Purpose |
+|---|---|---|
+| `desktop` target | `Makefile` | `dist/knoxmgr-desktop-windows-amd64.exe` with `-H windowsgui`; `clean` also removes `dist/` |
+| desktop build step | `.github/workflows/release.yml` | builds the same exe on release and uploads it |
+
 ## web (Go)
 
 | Block | File | Purpose |
@@ -241,7 +264,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | groups list | `web/src/routes/groups/+page.svelte` | group list |
 | group detail | `web/src/routes/groups/[id]/+page.svelte` | group members |
 | admin page | `web/src/routes/admin/+page.svelte` | app accounts and audit log |
-| setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code, admin, Knox (skippable), done |
+| setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code (prefilled from the `#code=` fragment by the desktop app, then stripped with `history.replaceState`), admin, Knox (skippable), done |
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |
 | AD settings | `web/src/routes/admin/settings/ad/+page.svelte` | AD settings, group mappings, test sign-in |
 | general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now", show-map toggle with privacy note |

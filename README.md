@@ -39,6 +39,32 @@ Then:
 knoxmgr speaks plain HTTP. For real use put a TLS reverse proxy in front. For plain HTTP only, add
 `secureCookies: false` to a `config.yaml` (otherwise sign-in does not stick).
 
+## Windows desktop (portable)
+
+For one person on a Windows PC, `knoxmgr-desktop-windows-amd64.exe` runs knoxmgr in its own window.
+No install, no server, no command line. It has not yet been tested on a real Windows machine.
+
+1. Download `knoxmgr-desktop-windows-amd64.exe` from the latest release.
+2. Put it in a folder of its own (for example `C:\knoxmgr`). Everything it saves goes in that folder.
+3. Double-click it. A knoxmgr window opens.
+4. First run: the setup code is filled in for you. Create the administrator, then enter your Knox
+   details as in Quick start above.
+5. Close the window to stop knoxmgr.
+
+- **Where your data is:** next to the `.exe`: the database and keys, `knoxmgr-desktop.log` (the log)
+  and `webview-data` (the window's browser data). Do not share the folder; it holds your encrypted
+  Knox secret and its key.
+- **Optional settings:** a `config.yaml` next to the `.exe` is read if present (its `listenAddr` is ignored).
+- **Moving or backing up:** close knoxmgr, then copy the whole folder.
+- **One copy per folder:** a second start from the same folder says knoxmgr is already running. Use
+  a different folder for a different tenant.
+- **WebView2:** the window needs the Microsoft WebView2 runtime, which is already part of current
+  Windows 10 and 11. If it is missing, knoxmgr opens in your default browser and shows a message box;
+  knoxmgr keeps running until you click **OK**, which stops it.
+- The window is only reachable from your own PC (it listens on `127.0.0.1`, on a free port).
+
+Build it yourself with `make desktop` (output `dist/knoxmgr-desktop-windows-amd64.exe`).
+
 ## Updating
 
 Pull the new image and recreate the container, or replace the binary. The data directory is kept.

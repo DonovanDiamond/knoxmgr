@@ -389,3 +389,15 @@ replacing the earlier "no embedded map" default.
 - The map shows the history points and a polyline, highlights the latest point and fits the bounds; the coordinates table and OpenStreetMap link stay.
 - Privacy trade-off: the viewer's browser loads tiles from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed. Admins can switch the map off under General settings; the CSP `img-src` allows only that tile host.
 - Visibility is the same as the location data (admin and write users); no new audit event, since `device.location.view` already covers the view and the setting change is audited as `settings.general`.
+
+## Windows desktop app
+
+**A portable `knoxmgr-desktop` exe: the normal server on `127.0.0.1` in a WebView2 window.** Decided 2026-10-13.
+- Why: a single non-technical user should double-click and get a window, with no console, port or browser setup.
+- It reuses the server unchanged. The shared start moved from `cmd/knoxmgr` to `src/server` (`Options`, `Run`); `cmd/knoxmgr` keeps only flags.
+- All state lives next to the exe (data dir, WebView2 data, log, lock), so moving or backing up is copying the folder. One instance per folder (lock file).
+- An optional `config.yaml` next to the exe is read; its `listenAddr` is ignored (always `127.0.0.1` on a free port).
+- The setup code travels only in the URL fragment (`/setup#code=`): never logged, never sent to the server. The setup page strips it from history.
+- Secure cookies stay on: browsers accept `Secure` cookies on loopback.
+- If WebView2 is missing it falls back to the default browser with a message box; OK stops the server.
+- Library: `github.com/jchv/go-webview2`, CGO-free through go-winloader, latest module time 2026-02-05. Chosen over the Wails WebView2 loader. Not tested on real Windows yet.

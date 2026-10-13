@@ -18,7 +18,9 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 
 | Module | Path | Role |
 |---|---|---|
-| main | `cmd/knoxmgr` | flags, data dir, wiring, `-create-admin` |
+| main | `cmd/knoxmgr` | flags, data dir, then `server.Run` |
+| desktop | `cmd/knoxmgr-desktop` | Windows only: loopback listener, `server.Run`, WebView2 window, lock file, log file |
+| server | `src/server` | shared start (`Options`, `Run`): config, db, migrate, wiring, serve; `-create-admin` |
 | knoxmock (cmd) | `cmd/knoxmock` | runs the fake Knox server |
 | config | `src/config` | optional `config.yaml` (defaults, validation, moved-key rejection), data dir, runtime `Knox`/`AD` structs, role/access constants, `Secret` |
 | secretbox | `src/secretbox` | AES-GCM `Seal`/`Open` for stored secrets; `LoadOrCreate` the key file |
@@ -36,12 +38,13 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 ## Dependency direction
 
 ```
-cmd/knoxmgr -> api -> settings -> auth -> db
+cmd/knoxmgr, cmd/knoxmgr-desktop -> server
+server -> api -> settings -> auth -> db
                   \        \        \      \-> config
                    \        \        \-> knox -> config
                     \        \-> secretbox
                      \-> auth, db, knox
-cmd/knoxmgr -> web (embed), config, secretbox, settings, sync, update
+server -> web (embed), config, secretbox, settings, sync, update
 sync -> db, knox
 api -> update
 cmd/knoxmock -> knoxmock   (knoxmock imports no other internal package)
@@ -50,7 +53,7 @@ cmd/knoxmock -> knoxmock   (knoxmock imports no other internal package)
 - `config` imports no internal package.
 - `db` imports no internal package. `auth` imports `config` and `db`. `knox` imports `config`. `secretbox` imports none. `settings` imports `auth`, `config`, `db`, `knox` and `secretbox`. `sync` imports `db` and `knox`. `update` imports no internal package (the enabled flag arrives as a func). `api` imports `auth`, `db`, `knox`, `settings` and `update`; it sees the scheduler only through the small `api.Syncer` interface (`SyncNow`, `Running`), so it does not import `sync`. `settings` does not import `sync` either: `main` passes it callbacks with `Manager.SetHooks` (run after `SaveKnox` and `SaveGeneral`, must not block).
 - `api` reaches Knox through the small `api.Knox` interface (implemented by `*knox.Client`), so tests can fake it. `Deps.Knox` is a `func() Knox` that returns nil while Knox is not configured, because the settings screens swap the client at run time; `main` adapts `settings.Manager.Knox()` (avoiding a typed-nil interface).
-- Only `cmd/knoxmgr` imports everything. No package imports `cmd` or `api`.
+- Only `src/server` imports everything. No package imports `cmd` or `api`.
 - Web SPA never imports Go; it calls `/api/*` only.
 
 ## Request / auth flow
@@ -119,5 +122,8 @@ Settings save
 - `api.putKnoxSettings` -> `settings.Manager.SaveKnox`: normalise, seal a new secret with `secretbox`, `db.AppSettings.SaveKnox` (row + audit in one transaction), then swap the live `knox.Client`. AD is the same via `SaveAD` and `auth.Service.SetDirectory`. Saves are serialised by `saveMu`.
 - `knoxConfigured` middleware on `/api/knox` answers 503 `knox_not_configured` while `Deps.Knox()` is nil.
 
-## Start-up order (`main.run`)
+## Windows desktop start (`cmd/knoxmgr-desktop`)
+Lock file (`knoxmgr-desktop.lock`, share mode 0) -> log file -> listen `127.0.0.1:0` -> `server.Run` in a goroutine with `DataDir` = exe folder and optional `config.yaml` there (`listenAddr` ignored) -> `OnReady(setupCode)` -> WebView2 window on `/` or `/setup#code=<code>` (fragment only: not logged, not sent to the server; the setup page strips it) -> window closes -> cancel context -> graceful shutdown. No WebView2: default browser plus a message box, OK stops it.
+
+## Start-up order (`server.Run`)
 flags -> `config.ResolveDataDir` -> `config.Load` (optional file; rejects moved keys) -> `db.Open` -> `db.Migrate` -> (`-create-admin`: create, exit) -> JWT keys (data dir) -> `secretbox.LoadOrCreate` (`secret.key`) -> `auth.NewService` -> `settings.New` and `Load` (builds the Knox client and AD directory; an undecryptable secret is logged and leaves that part off) -> `db.NewMirror`, `sync.New`, `update.New`, `Manager.SetHooks`, `go Scheduler.Start` (first sync if Knox is configured), `go checker.Start` -> setup code if no admin -> `web.FS` -> `api.New` -> listen (`-listen`, else `KNOXMGR_LISTEN`, else `listenAddr`).

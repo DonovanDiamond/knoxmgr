@@ -12,7 +12,9 @@ embedded in the binary; Tailwind v4 and daisyUI. `CGO_ENABLED=0`.
 ## Layout
 
 ```
-cmd/knoxmgr/   wiring only: flags, data dir, load config, open db, migrate, build services, start server
+cmd/knoxmgr/   flags and data dir only; calls server.Run
+cmd/knoxmgr-desktop/  portable Windows app (windows build tag): server on loopback in a WebView2 window
+src/server/    shared start: load config, open db, migrate, build services, serve (Options, Run, -create-admin)
 src/config/    optional config.yaml loading, defaults, validation, data dir, Secret type
 src/secretbox/ AES-256-GCM encryption of stored secrets; key file in the data dir
 src/settings/  Manager: validates and saves Knox / AD / general settings, rebuilds the live Knox client and AD directory
@@ -408,7 +410,7 @@ Multi-stage, five `FROM` lines:
 1. `web` (`node:22-alpine`): `npm ci` then `npm run build` in `web/`.
 2. `go` (`golang:1.26`): downloads modules, copies the source, copies `web/build` from the `web`
    stage (the Go package embeds it), then builds `knoxmgr` and `knoxmock` with `CGO_ENABLED=0`,
-   `-trimpath -ldflags "-s -w"`. No version is stamped in (no `main.version` variable exists).
+   `-trimpath -ldflags "-s -w"`. The version is stamped in via `-X main.version=${VERSION}` (build arg `VERSION`).
 3. Target `knoxmock` (`gcr.io/distroless/static-debian12:nonroot`): only the `knoxmock` binary,
    `EXPOSE 9090`, `ENTRYPOINT knoxmock`.
 4. Target `knoxmgr`, the last stage so a plain `docker build` yields it: the `knoxmgr` binary in
@@ -431,8 +433,31 @@ The data dir defaults to `/var/lib/knoxmgr/data`, inside the volume.
 | `web` | `cd web && npm ci && npm run build` (output `web/build`) |
 | `build` | runs `web`, then builds `bin/knoxmgr` and `bin/knoxmock` (linux, `CGO_ENABLED=0`) |
 | `build-windows` | runs `web`, then builds `bin/*.exe` for windows/amd64 |
+| `desktop` | runs `web`, then builds `dist/knoxmgr-desktop-windows-amd64.exe` (`-H windowsgui`, `CGO_ENABLED=0`) |
 | `test` | `go vet ./...`, `go test ./...`, `npm run check` in `web/` |
-| `clean` | removes `bin/` |
+| `clean` | removes `bin/` and `dist/` |
+
+The release workflow also builds the desktop exe and uploads it with the other binaries.
+
+### Windows desktop (`cmd/knoxmgr-desktop`)
+
+Windows only (`//go:build windows`). Untested on real Windows.
+
+- Calls `server.Run` with a listener on `127.0.0.1:0` (free port) and `DataDir` = the exe's folder.
+  An optional `config.yaml` next to the exe is read (`ConfigPath`); its `listenAddr` is ignored, since the
+  desktop always binds 127.0.0.1 on a free port. `OnReady` receives the setup code
+  instead of the log line.
+- Window: `github.com/jchv/go-webview2` (WebView2 without CGO, via go-winloader). WebView2 data in
+  `.\webview-data`. Creation and the message loop share one locked OS thread.
+- Opens `http://127.0.0.1:<port>/`, or `/setup#code=<code>` on first run. The code sits in the URL
+  fragment only: it is never logged and never sent to the server; the setup page reads it and strips
+  it with `history.replaceState`.
+- Log: `knoxmgr-desktop.log` (JSON, appended). Single instance: `knoxmgr-desktop.lock`, opened with
+  share mode 0; a second start shows a message box and exits.
+- Secure cookies stay on: browsers accept `Secure` cookies on loopback, and the HTTPS warning is
+  already suppressed for `127.0.0.1`.
+- WebView2 missing: opens the default browser, then a message box; OK cancels the server context.
+  Closing the window does the same, so shutdown is graceful.
 
 ### example/
 

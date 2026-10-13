@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { goto, replaceState } from '$app/navigation';
 	import { ApiError } from '#lib/api/client';
 	import { createFirstAdmin, verifySetupCode } from '#lib/api/setup';
 	import Field from '#components/Field.svelte';
@@ -14,6 +15,14 @@
 	let error = $state('');
 	let errors = $state<Record<string, string>>({});
 	let busy = $state(false);
+
+	// The desktop app passes the code in the fragment (never logged); strip it so it stays out of history.
+	onMount(() => {
+		const fromHash = new URLSearchParams(location.hash.slice(1)).get('code');
+		if (fromHash === null) return;
+		code = fromHash;
+		replaceState(location.pathname + location.search, {});
+	});
 
 	const titles = { 1: 'Welcome', 2: 'Create the administrator', 3: 'Connect Knox', 4: 'All set' };
 	const bytes = (s: string) => new TextEncoder().encode(s).length;
@@ -64,9 +73,9 @@
 	<HttpsWarning />
 
 	{#if step === 1}
-		<p class="muted mb-5">Enter the setup code that was printed in the server log at startup.</p>
+		<p class="muted mb-5">Enter the setup code from the server log. The desktop app fills it in for you.</p>
 		<form class="space-y-5" onsubmit={verify}>
-			<Field id="sc" label="Setup code" bind:value={code} hint="Printed in the server log at startup." />
+			<Field id="sc" label="Setup code" bind:value={code} />
 			{#if error}<div role="alert" class="note warn"><span>{error}</span></div>{/if}
 			<button class="btn btn-primary w-full" disabled={busy || !code.trim()}>{busy ? 'Checking...' : 'Continue'}</button>
 		</form>
