@@ -83,6 +83,9 @@ func (m *Manager) InstallationName() string { return m.general.Load().Installati
 // CheckUpdates reports whether the admin allows contacting GitHub for new releases.
 func (m *Manager) CheckUpdates() bool { return m.general.Load().CheckUpdates }
 
+// ShowMap reports whether the UI may draw device locations on a map (which loads OSM tiles).
+func (m *Manager) ShowMap() bool { return m.general.Load().ShowMap }
+
 func configured(k db.KnoxSettings) bool {
 	return k.BaseURL != "" && k.ClientID != "" && k.TenantID != "" && k.ClientSecretSeal != ""
 }
@@ -372,7 +375,10 @@ func (m *Manager) SaveGeneral(ctx context.Context, in GeneralInput, actor *auth.
 	m.saveMu.Lock()
 	defer m.saveMu.Unlock()
 	next := db.GeneralSettings{InstallationName: in.InstallationName, SyncIntervalMinutes: in.SyncIntervalMinutes,
-		CheckUpdates: m.general.Load().CheckUpdates}
+		CheckUpdates: m.general.Load().CheckUpdates, ShowMap: m.general.Load().ShowMap}
+	if in.ShowMap != nil {
+		next.ShowMap = *in.ShowMap
+	}
 	if in.CheckUpdates != nil {
 		next.CheckUpdates = *in.CheckUpdates
 	}

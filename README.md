@@ -89,7 +89,10 @@ every change is sent to Knox first. knoxmgr also stores its own application acco
 settings and an audit log. It does not manage device groups or the organization tree.
 
 The device screen also shows live details, installed apps and (admins and write users only) location
-from Knox, with the last answer kept for when Knox is unreachable.
+from Knox, with the last answer kept for when Knox is unreachable. Location is drawn on an embedded
+map (Leaflet, tiles from OpenStreetMap) with a coordinates table and an OpenStreetMap link. Admins can
+turn the map off under Admin > Settings > General > **Show map**: the viewer's browser loads tiles
+from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed.
 
 ## Vocabulary
 
@@ -99,7 +102,7 @@ from Knox, with the last answer kept for when Knox is unreachable.
 - **App user** — someone who signs in to knoxmgr. Not the same thing as a Knox user.
 - **Knox user** — a user record in the Knox tenant, the people whose devices are enrolled.
 - **Enrolled device** — a Knox device whose status is `A`, `B`, `BS`, `BA` or `BL`.
-- **Freshness** — how recently a device (or a user's enrolled devices) connected. Values: `fresh` (last connection 24h ago or less), `stale` (over 24h), `old` (over 7 days). On a user, `none` means no enrolled device, and `old` also covers an enrolled device that never connected. On a single device, `never` means enrolled but never connected, and `not_enrolled` means the device is not enrolled so is not graded. A user's grade comes from their stalest enrolled device.
+- **Freshness** — how recently a device (or a user's enrolled devices) connected. Values: `fresh` (last connection 24h ago or less), `stale` (over 24h), `old` (over 7 days). On a user, `none` means no enrolled device, and `old` also covers an enrolled device that never connected. On a single device, `never` means enrolled but never connected, and `not_enrolled` means the device is not enrolled so is not graded. A user's grade comes from their stalest enrolled device. Badge colours: `fresh` green, `stale` yellow, `old` red, `never` and `not_enrolled` grey, `none` the default badge.
 - **Enrollment invitation** — a message sent to a Knox user so they can enroll a device.
 - **User group** — a Knox group of Knox users. Device groups are out of scope.
 - **Scope** — the set of orgs an app user may act on: their bound org plus its sub-orgs.

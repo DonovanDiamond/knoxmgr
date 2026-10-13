@@ -376,8 +376,16 @@ see decision 2026-10-12 in CLAUDE.md. Reads come from the mirror, writes go to K
 **Pending user confirmation.** Chosen defaults, recorded 2026-10-12:
 - Detail, apps and location are fetched live from Knox when the screen opens, cached per device and kind (location per 1/7/30-day window) in `knox_device_cache`, and served with an "as of" note only when Knox is unreachable (`knox_unreachable`), not on Knox business errors. They are not part of the bulk sync; cache rows are pruned when a sync drops the device.
 - Location is for admins and write users only. Read users get 404, the same as for an out-of-scope device, chosen over 403 so the screen does not reveal that a location exists. Every location response is audited `device.location.view` `{days, cached}`.
-- No embedded map (CSP and privacy); coordinates are shown with an OpenStreetMap link-out.
+- Map: superseded 2026-10-13, see "Embedded location map" below. Coordinates stay in a table with an OpenStreetMap link-out.
 - Knox has no agent or client version field, so the "Agent profile" and "Client profile" names are shown instead.
 - History uses Knox's `period` (whole days: 1, 7 or 30).
 - Location calls send `deviceId` only; the spec also lists `mobileId`. Untested against a real tenant.
 - The device list badge reuses the per-device freshness, so an enrolled device that never connected is red ("old"), not grey; grey is only for non-enrolled devices.
+
+## Embedded location map
+
+**Leaflet bundled via npm (no CDN), OpenStreetMap tiles, admin toggle `showMap` default ON.** Decided 2026-10-13,
+replacing the earlier "no embedded map" default.
+- The map shows the history points and a polyline, highlights the latest point and fits the bounds; the coordinates table and OpenStreetMap link stay.
+- Privacy trade-off: the viewer's browser loads tiles from `tile.openstreetmap.org`, which sees its IP address and the approximate area viewed. Admins can switch the map off under General settings; the CSP `img-src` allows only that tile host.
+- Visibility is the same as the location data (admin and write users); no new audit event, since `device.location.view` already covers the view and the setting change is audited as `settings.general`.

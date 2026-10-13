@@ -184,6 +184,7 @@ export interface GeneralSettings {
 	installationName: string;
 	syncIntervalMinutes: number;
 	checkUpdates: boolean;
+	showMap: boolean;
 }
 
 export interface UpdateStatus {

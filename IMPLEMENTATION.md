@@ -123,6 +123,8 @@ secrets, saves with an audit row, and applies the change live (no restart): it s
   the signing-in user. A `ldap://` URL logs a warning when applied.
 - **General**: `installationName` and `syncIntervalMinutes` (1-1440, default 15). The name is
   returned by `/api/health`. Saving it makes the sync loop re-read the interval at once.
+  `showMap` (default on; omitted on PUT keeps the stored value) controls the device location map.
+  The toggle carries a privacy note: the viewer's browser loads tiles from OpenStreetMap.
 
 ### Secrets encryption
 
@@ -180,7 +182,8 @@ get foreign keys on, WAL and a 5s busy timeout.
 - `ad_group_mappings` — `id`, `position` (order), `group_dn`, `role`, `org_code`, `access`. Replaced
   as a whole on each AD save.
 - `general_settings` — one row (`id` = 1): `installation_name` (default `knoxmgr`),
-  `sync_interval_minutes` (default 15, CHECK 1-1440), `updated_at`.
+  `sync_interval_minutes` (default 15, CHECK 1-1440), `show_map` (0/1, default 1, migration
+  `0007`), `updated_at`.
 - Knox mirror (migration `0004`), keyed by the Knox ids, every row with `synced_at`: `knox_orgs`
   (`org_code`, `org_name`, `parent_code`), `knox_users` (profile fields, `org_code`, `enabled`,
   `device_count`), `knox_groups` (USER groups; `user_count` is recomputed from memberships),
@@ -263,7 +266,7 @@ Responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 when secure cookies are on, `Strict-Transport-Security: max-age=31536000`. `/api` responses are
 `Cache-Control: no-store`. HTML pages carry a `Content-Security-Policy`: `default-src 'self'`,
 `script-src 'self'` plus a sha256 hash of each inline script in `index.html` (computed at start-up),
-`style-src 'self' 'unsafe-inline'`, `img-src 'self' data:`, `frame-ancestors 'none'`.
+`style-src 'self' 'unsafe-inline'`, `img-src 'self' data: https://tile.openstreetmap.org` (map tiles), `frame-ancestors 'none'`.
 `POST /api/auth/refresh` and `/logout` return 403 when an `Origin` header names another host; no
 `Origin` passes. A Knox HTTP 4xx answer shows its text to admins only; others get "Knox rejected
 the request". Requests are logged (method, path, status, user, ip; never query
@@ -286,12 +289,12 @@ string or body).
 | `GET /api/knox/users/:id/groups` | Bearer; `{groups, total}` the user belongs to, from the mirror; 404 if the user is absent or out of scope |
 | `PUT /api/knox/users/:id` | write; target and new org must be in scope |
 | `DELETE /api/knox/users/:id` | write; body `{confirmUserId}` must equal the id, else 400; 204 |
-| `GET /api/knox/devices` | Bearer; optional `?q=` (model, device name, user name or id contains); `{devices, total}`; only devices whose owner is in scope, so unassigned devices are admin-only |
-| `GET /api/knox/devices/:id` | Bearer; 404 if absent in Knox, out of scope, or unassigned for a non-admin |
-| `GET /api/knox/users/:id/devices` | Bearer; `{devices, total}`; 404 if the user is out of scope |
+| `GET /api/knox/devices` | Bearer; optional `?q=` (model, device name, user name or id contains); `{devices, total}`; each device carries `freshness` (`fresh`, `stale`, `old`, `never` = enrolled but never connected, or `not_enrolled`; same 24h/7d bands); only devices whose owner is in scope, so unassigned devices are admin-only |
+| `GET /api/knox/devices/:id` | Bearer; carries the same per-device `freshness`; 404 if absent in Knox, out of scope, or unassigned for a non-admin |
+| `GET /api/knox/users/:id/devices` | Bearer; `{devices, total}` with per-device `freshness`; 404 if the user is out of scope |
 | `GET /api/knox/devices/:id/detail` | Bearer; same scope/404 as the device; live from Knox (`selectDeviceInfo` detail): `{info, profiles, fetchedAt, cached, canViewLocation}`. On `knox_unreachable` the last cached answer is returned with `cached: true`; Knox business errors are not masked |
 | `GET /api/knox/devices/:id/apps` | Bearer; same; `{apps: [{name, packageName, version}], fetchedAt, cached}` (up to 1000 apps) |
-| `GET /api/knox/devices/:id/location?days=1\|7\|30` | write or admin only (read users get 404, as for an out-of-scope device); default 7, other values 400; `{current, history, days, fetchedAt, cached}`; cached per window; every response audited `device.location.view` `{days, cached}` |
+| `GET /api/knox/devices/:id/location?days=1\|7\|30` | write or admin only (read users get 404, as for an out-of-scope device); default 7, other values 400; `{current, history, days, showMap, fetchedAt, cached}` (`showMap` is the live general setting, never cached); cached per window; every response audited `device.location.view` `{days, cached}` |
 | `GET /api/knox/groups`, `GET /api/knox/groups/:id` | Bearer; all groups for every role, including member counts |
 | `POST /api/knox/groups`, `DELETE /api/knox/groups/:id` | admin only |
 | `GET /api/knox/groups/:id/members` | Bearer; members filtered to scope |
@@ -303,7 +306,7 @@ string or body).
 | `POST /api/admin/settings/knox/test` | admin; same body as PUT, saves nothing; `{ok, stage?, message}` where stage is `token` or `api` |
 | `GET`, `PUT /api/admin/settings/ad` | admin; view (`bindPasswordSet`) / save and apply live |
 | `POST /api/admin/settings/ad/test` | admin; `{username, password, settings?}` signs in against the given (else stored) settings; `{ok, displayName, groups, role, orgCode, access}` or `{ok:false, code, message}`; saves nothing |
-| `GET`, `PUT /api/admin/settings/general` | admin; `{installationName, syncIntervalMinutes}` |
+| `GET`, `PUT /api/admin/settings/general` | admin; `{installationName, syncIntervalMinutes, checkUpdates, showMap}` |
 | `POST /api/admin/sync` | admin; starts a sync in the background, 202 `{id, alreadyRunning}`; 503 `knox_not_configured`; audited `admin.sync.start` |
 | `GET /api/admin/sync` | admin; `{running, runId?, runs}` with the last 10 runs (`id`, `trigger`, `startedAt`, `finishedAt`, `status`, `error`, `counts`) |
 | any other `/api/*` | 404 JSON |
@@ -375,7 +378,7 @@ and last name and derives the display name from them until the display name is e
 | `/users/new` | create user |
 | `/users/[id]` | user screen: details incl. last invited, groups, devices; edit, invite, delete |
 | `/devices` | device list with search and a freshness badge per device |
-| `/devices/[id]` | device detail: live info and profiles, applications (filterable), location with 1/7/30-day history and OpenStreetMap links (admin and write users); "as of" note when served from cache |
+| `/devices/[id]` | device detail: live info and profiles, applications (filterable), location with 1/7/30-day history on an embedded Leaflet map (hidden when `showMap` is off or there are no points) plus a coordinates table and OpenStreetMap links (admin and write users); "as of" note when served from cache |
 | `/groups` | group list |
 | `/groups/[id]` | group members |
 | `/setup` | first-run wizard: code, admin, Knox (skippable), done |

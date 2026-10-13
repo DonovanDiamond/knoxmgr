@@ -23,6 +23,7 @@
 	let installationName = $state('');
 	let interval = $state('15');
 	let checkUpdates = $state(true);
+	let showMap = $state(true);
 	let errors = $state<Record<string, string>>({});
 	let formError = $state('');
 	let saving = $state(false);
@@ -35,6 +36,7 @@
 			installationName = s.installationName;
 			interval = String(s.syncIntervalMinutes);
 			checkUpdates = s.checkUpdates;
+			showMap = s.showMap;
 		} catch (e) {
 			loadError = e instanceof ApiError ? e.message : 'Could not reach the server.';
 		} finally {
@@ -118,10 +120,11 @@
 		saving = true;
 		formError = '';
 		try {
-			const s = await saveGeneralSettings({ installationName: installationName.trim(), syncIntervalMinutes: minutes, checkUpdates });
+			const s = await saveGeneralSettings({ installationName: installationName.trim(), syncIntervalMinutes: minutes, checkUpdates, showMap });
 			installationName = s.installationName;
 			interval = String(s.syncIntervalMinutes);
 			checkUpdates = s.checkUpdates;
+			showMap = s.showMap;
 			void getUpdateStatus().then((u) => (update = u), () => {});
 			toast.show('Settings saved');
 		} catch (err) {
@@ -159,6 +162,15 @@
 			<input type="checkbox" class="toggle toggle-primary" bind:checked={checkUpdates} />
 			<span>Check for updates</span>
 		</label>
+		<div>
+			<label class="flex min-h-11 items-center gap-3">
+				<input type="checkbox" class="toggle toggle-primary" bind:checked={showMap} />
+				<span>Show map</span>
+			</label>
+			<p class="muted text-[15px]">
+				Map tiles are loaded by the viewer's browser from OpenStreetMap, which sees the viewer's IP address and the approximate area being viewed.
+			</p>
+		</div>
 		{#if formError}<p class="err" role="alert">{formError}</p>{/if}
 		<div class="mt-2 flex sm:justify-end">
 			<button type="submit" class="btn btn-primary w-full sm:w-auto" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>

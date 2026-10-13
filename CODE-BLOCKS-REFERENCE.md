@@ -46,6 +46,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | schema | `src/db/migrations/0003_app_settings.sql` | `knox_settings`, `ad_settings`, `ad_group_mappings`, `general_settings` (singletons seeded with id 1; `*_cipher` columns hold sealed secrets) |
 | schema | `src/db/migrations/0004_knox_mirror.sql` | `knox_orgs`, `knox_users`, `knox_groups`, `knox_group_members`, `knox_devices` (mirror, `synced_at` on each) and `sync_runs` |
 | schema | `src/db/migrations/0006_update_check.sql` | `general_settings.check_updates` (0/1, default 1) |
+| schema | `src/db/migrations/0007_show_map.sql` | `general_settings.show_map` (0/1, default 1) |
 | schema | `src/db/migrations/0005_device_cache.sql` | `knox_device_cache` (`device_id`, `kind`, `payload` JSON, `fetched_at`; primary key device+kind) |
 | `DeviceCacheEntry`, `DeviceCache`, `PutDeviceCache` | `src/db/device_cache.go` | read / upsert the last live Knox answer of a kind for a device (`ErrNotFound` when none); `ReplaceAll` also prunes rows of dropped devices |
 | `Mirror`, `NewMirror`, `Snapshot`, `MirrorOrg`, `MirrorUser`, `MirrorGroup`, `MirrorMember`, `MirrorDevice` | `src/db/mirror.go` | mirror repository and row types |
@@ -57,7 +58,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `RefreshTokens` (`Insert`, `GetValid`, `GetByHash`, `Revoke`, `RevokeAllForUser`) | `src/db/refresh_tokens.go` | hashed refresh token store; single-use revoke; `GetByHash` finds revoked tokens so replay can be detected |
 | `AuditEntry`, `Audit` (`Insert`, `InsertInvites`, `ListRecent`, `LatestInvites`), `insertAudit` | `src/db/audit.go` | append-only audit log; `LatestInvites(ctx, ids)` maps user id to its latest invite time (`MAX(invited_at)` from `invites`, batched at 500); `InsertInvites(ctx, e, userIDs)` writes the audit row and one `invites` row per id in one transaction; `insertAudit` works inside a transaction |
 | `Settings` (`Get`, `Set`) | `src/db/settings.go` | key/value settings; `Set` audits atomically |
-| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
+| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
 
 ## src/secretbox
 
@@ -76,6 +77,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `ADView`, `GetAD`, `SaveAD`, `TestAD`, `ADTestSuccess`, `ADTestFailure`, `resolveAD` | `src/settings/manager.go` | AD settings view, save-and-apply, test sign-in with role result |
 | `GetGeneral`, `SaveGeneral` | `src/settings/manager.go` | installation name and sync interval |
 | `CheckUpdates` | `src/settings/manager.go` | whether GitHub update checks are allowed (live general setting) |
+| `ShowMap` | `src/settings/manager.go` | whether the device location map is shown (live general setting; `GeneralInput.ShowMap` nil keeps the stored value) |
 | `SetHooks`, `onKnoxSaved`, `onGeneralSaved` | `src/settings/manager.go` | callbacks run after a successful `SaveKnox` / `SaveGeneral` (main wires the sync scheduler); must not block |
 | `KnoxInput`, `ADInput`, `ADMapping`, `GeneralInput`, `normalise`, `InvalidError`, `Region`, `Regions` | `src/settings/validate.go` | input validation (400 via `InvalidError`), preset Knox regions |
 
@@ -170,7 +172,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `userView`, `viewsOf`, `listOrgs` | `src/api/knox.go` | user JSON with `devices`/`invitedAt`; `viewsOf` attaches them to a user slice with one mirror device query and one batched invite lookup; `GET /api/knox/orgs` from the mirror, filtered to scope |
 | `listUserGroups`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers` | `src/api/knox.go` | user handlers; reads from the mirror (`listUserGroups` is `GET /users/:id/groups`), scoped in SQL; create/update/purge patch the mirror after Knox succeeds; purge needs `confirmUserId` |
 | `listGroups`, `getGroup`, `createGroup`, `deleteGroup`, `listMembers`, `addMembers`, `removeMembers`, `changeMembers` | `src/api/knox.go` | group handlers; groups visible to all, members filtered to scope in SQL; create/delete/membership changes patch the mirror after Knox succeeds; `listMembers` returns each member with `devices` |
-| `freshnessOf`, `isEnrolled`, `deviceView`, `deviceSummary`, `viewOfDevice`, `summarize`, `listDevices`, `getDevice`, `listUserDevices` | `src/api/devices.go` | freshness constants (24h stale, 7d old), enrolled statuses, device JSON and the three device handlers; read from the mirror; scope via the owner's org in SQL, out of scope 404 |
+| `freshnessOf`, `deviceFreshness`, `isEnrolled`, `deviceView`, `deviceSummary`, `viewOfDevice`, `summarize`, `listDevices`, `getDevice`, `listUserDevices` | `src/api/devices.go` | freshness constants (24h stale, 7d old), enrolled statuses, device JSON and the three device handlers; read from the mirror; scope via the owner's org in SQL, out of scope 404 |
 | `liveOrCached`, `deviceInfo`, `detailPayload`, `detailResponse`, `detailOf`, `rfc3339`, `canViewLocation`, `deviceDetail`, `appView`, `appsPayload`, `deviceApps`, `locationPoint`, `locationPayload`, `pointOf`, `locationDays`, `deviceLocation` | `src/api/device_live.go` | live device detail/apps/location with cache fallback on `knox_unreachable`; location admin/write only (404 otherwise), validated `days`, audited `device.location.view` |
 | `scope`, `scopeOrgs`, `mirrorUser`, `mirrorGroup`, `errGroupNotFound`, `mirrorWrite`, `refreshMirrorUser`, `userOfMirror`, `usersOfMirror`, `mirrorOfUser`, `orgsOfMirror`, `groupOfMirror`, `groupsOfMirror`, `devicesOfMirror` | `src/api/mirror.go` | caller's `Scope` and SQL org list from the mirror (nil = admin); mirror reads that look like not-found when absent; mirror rows to the `knox.*` JSON shapes; post-Knox mirror updates log, not fail |
 | `startSync`, `syncStatus`, `syncRunView`, `viewOfRun`, `syncHistory` | `src/api/sync.go` | `POST /api/admin/sync` (202, audited `admin.sync.start`) and `GET /api/admin/sync` (running flag, last 10 runs) |
@@ -225,7 +227,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
 | `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled |
 | `UserEditor`, `Field`, `OrgSelect`, `Note` | `web/src/lib/components/` | user create/edit form and its parts |
-| `DeviceApps`, `DeviceLocation` | `web/src/lib/components/` | device screen sections: filterable app list; location (current fix, 1/7/30-day history, OpenStreetMap links); both show an "as of" note when cached |
+| `DeviceApps`, `DeviceLocation` | `web/src/lib/components/` | device screen sections: filterable app list; location (current fix, 1/7/30-day history on a bundled Leaflet map with OSM tiles, hidden when `showMap` is off or no points; coordinates table, OpenStreetMap links); both show an "as of" note when cached |
 | `DeviceBadge`, `Chip`, `Avatar`, `Icon` | `web/src/lib/components/` | small display components (`DeviceBadge` `count` optional: omitted shows freshness dot only) |
 | layout | `web/src/routes/+layout.svelte` | restore session on load, redirect to `/login`, wrap pages in `Shell` |
 | `ssr = false`, `prerender = false` | `web/src/routes/+layout.ts` | SPA mode |
@@ -242,7 +244,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code, admin, Knox (skippable), done |
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |
 | AD settings | `web/src/routes/admin/settings/ad/+page.svelte` | AD settings, group mappings, test sign-in |
-| general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now" |
+| general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now", show-map toggle with privacy note |
 | styles | `web/src/app.css` | Tailwind v4 + daisyUI themes `fclight`/`fcdark`, Figtree via @fontsource; `row-hover` for clickable rows |
 | `app.html`, `app.d.ts` | `web/src/` | SvelteKit template and ambient types |
 | kit/vite config | `web/vite.config.ts` | sveltekit plugin options, adapter-static, `/api` dev proxy |

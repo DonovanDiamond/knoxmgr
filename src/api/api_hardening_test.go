@@ -42,7 +42,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 	csp := do(t, app, "GET", "/login", "", "").Header.Get("Content-Security-Policy")
 	want := "default-src 'self'; script-src 'self' " + hash("var a=1;") + " " + hash("start()") +
-		"; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+		"; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 	if csp != want {
 		t.Fatalf("csp\n got %q\nwant %q", csp, want)
 	}

@@ -218,4 +218,5 @@ type GeneralInput struct {
 	InstallationName    string `json:"installationName"`
 	SyncIntervalMinutes int    `json:"syncIntervalMinutes"`
 	CheckUpdates        *bool  `json:"checkUpdates"` // nil keeps the current value
+	ShowMap             *bool  `json:"showMap"`      // nil keeps the current value
 }

@@ -62,5 +62,5 @@ func contentSecurityPolicy(static fs.FS) string {
 			src += " 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
 		}
 	}
-	return "default-src 'self'; " + src + "; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+	return "default-src 'self'; " + src + "; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 }

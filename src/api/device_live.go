@@ -228,5 +228,6 @@ func (s *server) deviceLocation(c fiber.Ctx) error {
 		return err
 	}
 	s.record(c, "device.location.view", d.DeviceID, nil, fiber.Map{"days": days, "cached": cached})
-	return c.JSON(fiber.Map{"current": p.Current, "history": p.History, "days": days, "fetchedAt": at.Format(time.RFC3339), "cached": cached})
+	return c.JSON(fiber.Map{"current": p.Current, "history": p.History, "days": days, "fetchedAt": at.Format(time.RFC3339), "cached": cached,
+		"showMap": s.Settings.ShowMap()})
 }

@@ -180,16 +180,16 @@ func TestGeneralValidation(t *testing.T) {
 		in      GeneralInput
 		wantErr bool
 	}{
-		{"ok", GeneralInput{"Acme", 15, bp(true)}, false},
-		{"min", GeneralInput{"A", 1, bp(true)}, false},
-		{"max", GeneralInput{"A", 1440, bp(true)}, false},
-		{"empty name", GeneralInput{" ", 15, bp(true)}, true},
-		{"control in name", GeneralInput{"a\tb", 15, bp(true)}, true},
-		{"long name", GeneralInput{strings.Repeat("a", 101), 15, bp(true)}, true},
-		{"zero interval", GeneralInput{"A", 0, bp(true)}, true},
-		{"huge interval", GeneralInput{"A", 1441, bp(true)}, true},
-		{"negative interval", GeneralInput{"A", -5, bp(true)}, true},
-		{"checkUpdates absent", GeneralInput{"A", 15, nil}, false},
+		{"ok", GeneralInput{"Acme", 15, bp(true), nil}, false},
+		{"min", GeneralInput{"A", 1, bp(true), nil}, false},
+		{"max", GeneralInput{"A", 1440, bp(true), nil}, false},
+		{"empty name", GeneralInput{" ", 15, bp(true), nil}, true},
+		{"control in name", GeneralInput{"a\tb", 15, bp(true), nil}, true},
+		{"long name", GeneralInput{strings.Repeat("a", 101), 15, bp(true), nil}, true},
+		{"zero interval", GeneralInput{"A", 0, bp(true), nil}, true},
+		{"huge interval", GeneralInput{"A", 1441, bp(true), nil}, true},
+		{"negative interval", GeneralInput{"A", -5, bp(true), nil}, true},
+		{"checkUpdates absent", GeneralInput{"A", 15, nil, nil}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -418,10 +418,10 @@ func bp(b bool) *bool { return &b }
 func TestGeneralKeepsCheckUpdatesWhenAbsent(t *testing.T) {
 	m, _, _, _ := newManager(t)
 	ctx := context.Background()
-	if v, err := m.SaveGeneral(ctx, GeneralInput{"Acme", 30, bp(false)}, actor); err != nil || v.CheckUpdates || m.CheckUpdates() {
+	if v, err := m.SaveGeneral(ctx, GeneralInput{"Acme", 30, bp(false), nil}, actor); err != nil || v.CheckUpdates || m.CheckUpdates() {
 		t.Fatalf("explicit false: %+v, %v", v, err)
 	}
-	if v, err := m.SaveGeneral(ctx, GeneralInput{"Acme", 45, nil}, actor); err != nil || v.CheckUpdates || m.CheckUpdates() {
+	if v, err := m.SaveGeneral(ctx, GeneralInput{"Acme", 45, nil, nil}, actor); err != nil || v.CheckUpdates || m.CheckUpdates() {
 		t.Fatalf("absent must keep false: %+v, %v", v, err)
 	}
 }
@@ -431,13 +431,30 @@ func TestGeneralLive(t *testing.T) {
 	if m.InstallationName() != "knoxmgr" {
 		t.Fatalf("default name = %q", m.InstallationName())
 	}
-	if _, err := m.SaveGeneral(context.Background(), GeneralInput{"Acme", 30, bp(true)}, actor); err != nil || m.InstallationName() != "Acme" {
+	if _, err := m.SaveGeneral(context.Background(), GeneralInput{"Acme", 30, bp(true), nil}, actor); err != nil || m.InstallationName() != "Acme" {
 		t.Fatalf("name = %q, %v", m.InstallationName(), err)
 	}
-	if _, err := m.SaveGeneral(context.Background(), GeneralInput{"Acme", 0, bp(true)}, actor); err == nil || m.InstallationName() != "Acme" {
+	if _, err := m.SaveGeneral(context.Background(), GeneralInput{"Acme", 0, bp(true), nil}, actor); err == nil || m.InstallationName() != "Acme" {
 		t.Fatal("invalid save must change nothing")
 	}
 	if e, _ := audit.ListRecent(context.Background(), 5); len(e) != 1 || e[0].Action != "settings.general" {
 		t.Fatalf("audit = %+v", e)
+	}
+}
+
+func TestGeneralShowMap(t *testing.T) {
+	m, _, _, _ := newManager(t)
+	ctx := context.Background()
+	if !m.ShowMap() {
+		t.Fatal("show map must default to true")
+	}
+	for _, c := range []struct {
+		name string
+		in   *bool
+		want bool
+	}{{"off", bp(false), false}, {"absent keeps", nil, false}, {"on", bp(true), true}} {
+		if v, err := m.SaveGeneral(ctx, GeneralInput{"Acme", 30, nil, c.in}, actor); err != nil || v.ShowMap != c.want || m.ShowMap() != c.want {
+			t.Fatalf("%s: %+v, %v", c.name, v, err)
+		}
 	}
 }

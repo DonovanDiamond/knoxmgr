@@ -39,6 +39,7 @@ type GeneralSettings struct {
 	InstallationName    string `db:"installation_name" json:"installationName"`
 	SyncIntervalMinutes int    `db:"sync_interval_minutes" json:"syncIntervalMinutes"`
 	CheckUpdates        bool   `db:"check_updates" json:"checkUpdates"`
+	ShowMap             bool   `db:"show_map" json:"showMap"`
 }
 
 // AppSettings stores the admin-editable settings. Every save audits in the same transaction.
@@ -80,7 +81,7 @@ func (r *AppSettings) GetGeneral(ctx context.Context) (GeneralSettings, error) {
 
 func getGeneral(ctx context.Context, q sqlx.QueryerContext) (GeneralSettings, error) {
 	var g GeneralSettings
-	if err := sqlx.GetContext(ctx, q, &g, `SELECT installation_name, sync_interval_minutes, check_updates FROM general_settings WHERE id = 1`); err != nil {
+	if err := sqlx.GetContext(ctx, q, &g, `SELECT installation_name, sync_interval_minutes, check_updates, show_map FROM general_settings WHERE id = 1`); err != nil {
 		return g, fmt.Errorf("loading general settings: %w", err)
 	}
 	return g, nil
@@ -177,8 +178,8 @@ func (r *AppSettings) SaveGeneral(ctx context.Context, next GeneralSettings, act
 			return nil, nil, err
 		}
 		if _, err := tx.ExecContext(ctx, tx.Rebind(`
-			UPDATE general_settings SET installation_name = ?, sync_interval_minutes = ?, check_updates = ?, updated_at = ? WHERE id = 1`),
-			next.InstallationName, next.SyncIntervalMinutes, next.CheckUpdates, now()); err != nil {
+			UPDATE general_settings SET installation_name = ?, sync_interval_minutes = ?, check_updates = ?, show_map = ?, updated_at = ? WHERE id = 1`),
+			next.InstallationName, next.SyncIntervalMinutes, next.CheckUpdates, next.ShowMap, now()); err != nil {
 			return nil, nil, fmt.Errorf("saving general settings: %w", err)
 		}
 		return auditJSON(prev), auditJSON(next), nil

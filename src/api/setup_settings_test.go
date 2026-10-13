@@ -423,7 +423,7 @@ func TestADAndGeneralEndpoints(t *testing.T) {
 
 	var gen map[string]any
 	decode(t, do(t, e.app, "GET", "/api/admin/settings/general", "", a), &gen)
-	if gen["installationName"] != "knoxmgr" || gen["syncIntervalMinutes"] != float64(15) || gen["checkUpdates"] != true {
+	if gen["installationName"] != "knoxmgr" || gen["syncIntervalMinutes"] != float64(15) || gen["checkUpdates"] != true || gen["showMap"] != true {
 		t.Fatalf("general default = %v", gen)
 	}
 	for _, body := range []string{`{"installationName":"","syncIntervalMinutes":15}`, `{"installationName":"A","syncIntervalMinutes":0}`, `{"installationName":"A","syncIntervalMinutes":1441}`} {

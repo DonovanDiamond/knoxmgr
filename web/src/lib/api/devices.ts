@@ -65,6 +65,7 @@ export interface DeviceLocation {
 	days: number;
 	fetchedAt: string;
 	cached: boolean;
+	showMap: boolean;
 }
 
 export const getDeviceDetail = (id: string) => api<DeviceDetail>(`/api/knox/devices/${seg(id)}/detail`);

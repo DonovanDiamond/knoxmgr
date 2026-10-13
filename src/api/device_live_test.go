@@ -175,8 +175,21 @@ func TestDeviceLocation(t *testing.T) {
 		}
 		History []struct{ Latitude float64 }
 		Days    int
+		ShowMap bool
 	}
 	decode(t, do(t, e.app, "GET", "/api/knox/devices/dev-carol-phone/location?days=30", "", tok), &got)
+	if !got.ShowMap {
+		t.Fatalf("showMap default: %+v", got)
+	}
+	// The live setting wins over anything cached, so turning it off shows on the next response.
+	if resp := do(t, e.app, "PUT", "/api/admin/settings/general", `{"installationName":"x","syncIntervalMinutes":15,"showMap":false}`, e.token(t, "root")); resp.StatusCode != 200 {
+		t.Fatalf("PUT general: %d", resp.StatusCode)
+	}
+	got.ShowMap = true
+	decode(t, do(t, e.app, "GET", "/api/knox/devices/dev-carol-phone/location?days=30", "", tok), &got)
+	if got.ShowMap {
+		t.Fatalf("showMap still true after disabling")
+	}
 	if got.Current == nil || got.Current.Latitude != 10.5 || got.Current.Altitude != nil || got.Current.Time == "" ||
 		len(got.History) != 1 || got.Days != 30 {
 		t.Fatalf("got %+v", got)

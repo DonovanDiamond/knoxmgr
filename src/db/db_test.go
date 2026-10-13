@@ -52,7 +52,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 6 {
+	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 7 {
 		t.Fatalf("schema_migrations rows = %d, %v", n, err)
 	}
 }
@@ -532,7 +532,7 @@ func TestAppSettingsDefaults(t *testing.T) {
 		t.Fatalf("ad defaults = %+v, %v", a, err)
 	}
 	g, err := r.GetGeneral(ctx)
-	if err != nil || g != (GeneralSettings{InstallationName: "knoxmgr", SyncIntervalMinutes: 15, CheckUpdates: true}) {
+	if err != nil || g != (GeneralSettings{InstallationName: "knoxmgr", SyncIntervalMinutes: 15, CheckUpdates: true, ShowMap: true}) {
 		t.Fatalf("general defaults = %+v, %v", g, err)
 	}
 }
@@ -570,10 +570,10 @@ func TestAppSettingsRoundTripAndAudit(t *testing.T) {
 		t.Fatalf("mapping order lost: %+v", got.Mappings)
 	}
 
-	if err := r.SaveGeneral(ctx, GeneralSettings{InstallationName: "Acme", SyncIntervalMinutes: 30, CheckUpdates: false}, nil, "root"); err != nil {
+	if err := r.SaveGeneral(ctx, GeneralSettings{InstallationName: "Acme", SyncIntervalMinutes: 30, CheckUpdates: false, ShowMap: false}, nil, "root"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := r.GetGeneral(ctx); got.InstallationName != "Acme" || got.SyncIntervalMinutes != 30 || got.CheckUpdates {
+	if got, _ := r.GetGeneral(ctx); got.InstallationName != "Acme" || got.SyncIntervalMinutes != 30 || got.CheckUpdates || got.ShowMap {
 		t.Fatalf("general = %+v", got)
 	}
 
