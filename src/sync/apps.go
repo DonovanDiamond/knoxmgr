@@ -44,32 +44,32 @@ func NewInventory(m *db.Mirror, a *db.Apps, au *db.Audit, k func() *knox.Client,
 
 // PullDevice replaces one device's mirrored app list with Knox's current one.
 func (i *Inventory) PullDevice(ctx context.Context, deviceID string) error {
-	_, _, err := i.pullDevice(ctx, deviceID)
+	_, _, _, err := i.pullDevice(ctx, deviceID)
 	return err
 }
 
 // pullDevice is PullDevice, also returning how many rows were stored and the app-list
-// diagnostic when Knox sent no apps.
-func (i *Inventory) pullDevice(ctx context.Context, deviceID string) (int, *knox.AppListDiagnostic, error) {
+// diagnostic when Knox sent no apps, or the first item's key names and types when it did.
+func (i *Inventory) pullDevice(ctx context.Context, deviceID string) (int, *knox.AppListDiagnostic, map[string]string, error) {
 	k := i.knox()
 	if k == nil {
-		return 0, nil, ErrNotConfigured
+		return 0, nil, nil, ErrNotConfigured
 	}
-	list, diag, err := k.SelectDeviceAppList(ctx, deviceID)
+	list, diag, shape, err := k.SelectDeviceAppList(ctx, deviceID)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	rows := make([]db.DeviceAppRow, 0, len(list))
 	for _, a := range list {
-		r := db.DeviceAppRow{Package: a.PackageName, Name: a.AppName, Version: a.VersionName,
-			System: a.System(), Managed: a.Managed(), Mandatory: a.Mandatory(), KnoxID: a.KnoxID}
+		r := db.DeviceAppRow{Package: string(a.PackageName), Name: string(a.AppName), Version: string(a.VersionName),
+			System: a.System(), Managed: a.Managed(), Mandatory: a.Mandatory(), KnoxID: string(a.KnoxID)}
 		if a.Installed != "" {
-			t := a.Installed
+			t := string(a.Installed)
 			r.InstalledAt = &t
 		}
 		rows = append(rows, r)
 	}
-	return len(rows), diag, i.apps.ReplaceDeviceApps(ctx, deviceID, rows, i.now())
+	return len(rows), diag, shape, i.apps.ReplaceDeviceApps(ctx, deviceID, rows, i.now())
 }
 
 // enrolledDevices lists the mirrored devices whose status says they are enrolled.
@@ -133,9 +133,9 @@ func (i *Inventory) PullAll(ctx context.Context) error {
 		return fmt.Errorf("listing devices: %w", err)
 	}
 	var mu stdsync.Mutex
-	stored, empty, warned := 0, 0, false
+	stored, empty, warned, shaped := 0, 0, false, false
 	ok, failed := forEach(ctx, devices, func(d db.MirrorDevice) error {
-		n, diag, err := i.pullDevice(ctx, d.DeviceID)
+		n, diag, shape, err := i.pullDevice(ctx, d.DeviceID)
 		if err != nil {
 			i.log.Warn().Err(err).Str("device", d.DeviceID).Msg("app inventory pull failed for device")
 			return err
@@ -143,6 +143,10 @@ func (i *Inventory) PullAll(ctx context.Context) error {
 		mu.Lock()
 		defer mu.Unlock()
 		stored += n
+		if shape != nil && !shaped { // field names are unconfirmed on the real tenant; log one item per pull
+			shaped = true
+			i.log.Info().Str("device", d.DeviceID).Interface("itemFields", shape).Msg("Knox app item shape")
+		}
 		if diag != nil {
 			empty++
 			if !warned { // one sample per pull is enough to see the payload shape

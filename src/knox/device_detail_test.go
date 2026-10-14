@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -31,7 +32,7 @@ func TestDeviceDetailCalls(t *testing.T) {
 	if err != nil || d.IMEI != "123" || d.IsRooting != "N" || len(d.Profiles) != 1 || d.Created != "2024-12-03T22:30:01Z" || form.Get("deviceId") != "dev1" {
 		t.Fatalf("detail = %+v, %v, form %v", d, err, form)
 	}
-	apps, diag, err := c.SelectDeviceAppList(ctx, "dev1")
+	apps, diag, _, err := c.SelectDeviceAppList(ctx, "dev1")
 	if err != nil || diag != nil || len(apps) != 1 || apps[0].PackageName != "com.mail" {
 		t.Fatalf("apps = %+v, %v", apps, err)
 	}
@@ -53,7 +54,7 @@ func TestDeviceDetailRejectsBadInput(t *testing.T) {
 	if _, err := c.SelectDeviceDetail(ctx, ""); err == nil {
 		t.Error("detail: empty id accepted")
 	}
-	if _, _, err := c.SelectDeviceAppList(ctx, ""); err == nil {
+	if _, _, _, err := c.SelectDeviceAppList(ctx, ""); err == nil {
 		t.Error("apps: empty id accepted")
 	}
 	if _, err := c.SelectDeviceLocation(ctx, ""); err == nil {
@@ -61,5 +62,36 @@ func TestDeviceDetailRejectsBadInput(t *testing.T) {
 	}
 	if _, err := c.SelectDeviceLocationHistory(ctx, "d", now, now.Add(-time.Hour)); err == nil {
 		t.Error("history: inverted window accepted")
+	}
+}
+
+func TestSelectDeviceAppListShapes(t *testing.T) {
+	tests := []struct {
+		name, value string
+		want        []DeviceApp
+		wantShape   map[string]string
+	}{
+		{"appList with numeric total", `{"appList":[{"packageName":"com.a","appName":"A"}],"total":283}`,
+			[]DeviceApp{{PackageName: "com.a", AppName: "A"}}, map[string]string{"packageName": "string", "appName": "string"}},
+		{"devicelist fallback", `{"devicelist":[{"packageName":"com.b"}],"total":"1"}`,
+			[]DeviceApp{{PackageName: "com.b"}}, map[string]string{"packageName": "string"}},
+		{"appList wins over devicelist", `{"appList":[{"packageName":"com.a"}],"devicelist":[{"packageName":"com.b"}]}`,
+			[]DeviceApp{{PackageName: "com.a"}}, map[string]string{"packageName": "string"}},
+		{"numeric bool and null fields", `{"appList":[{"packageName":"com.c","versionName":1.5,"systemApp":true,"isManaged":1,"mandatoryApp":null,"knoxId":{"x":1}}]}`,
+			[]DeviceApp{{PackageName: "com.c", VersionName: "1.5", SystemApp: "true", IsManaged: "1"}},
+			map[string]string{"packageName": "string", "versionName": "number", "systemApp": "boolean", "isManaged": "number", "mandatoryApp": "null", "knoxId": "object"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, c := newFake(t)
+			f.api = func(w http.ResponseWriter, r *http.Request, v url.Values) { ok(w, tt.value) }
+			apps, diag, shape, err := c.SelectDeviceAppList(context.Background(), "dev1")
+			if err != nil || diag != nil || !reflect.DeepEqual(apps, tt.want) || !reflect.DeepEqual(shape, tt.wantShape) {
+				t.Fatalf("apps = %+v, diag %+v, shape %v, %v", apps, diag, shape, err)
+			}
+			if len(apps) == 1 && tt.name == "numeric bool and null fields" && (!apps[0].System() || !apps[0].Managed() || apps[0].Mandatory()) {
+				t.Fatalf("flags = %v %v %v", apps[0].System(), apps[0].Managed(), apps[0].Mandatory())
+			}
+		})
 	}
 }

@@ -147,6 +147,9 @@ func TestPullAllLogsCountsAndEmptySample(t *testing.T) {
 	if !strings.Contains(out, `"appRows":`) || !strings.Contains(out, `"devicesWithoutApps":`) {
 		t.Fatalf("summary line lacks counts: %s", out)
 	}
+	if n := strings.Count(out, "Knox app item shape"); n != 1 || !strings.Contains(out, `"packageName":"string"`) {
+		t.Fatalf("item shape logged %d times: %s", n, out)
+	}
 	if n := strings.Count(out, "Knox returned no apps for device"); n > 1 {
 		t.Fatalf("empty-list warning logged %d times in one pull", n)
 	}

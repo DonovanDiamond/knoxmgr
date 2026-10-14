@@ -39,7 +39,7 @@ func TestAppFlags(t *testing.T) {
 		want bool
 	}{{"Y", true}, {"y", true}, {"true", true}, {"1", true}, {"N", false}, {"false", false}, {"0", false}, {"", false}, {"null", false}}
 	for _, tt := range tests {
-		a := DeviceApp{SystemApp: tt.in, IsManaged: tt.in, MandatoryApp: tt.in}
+		a := DeviceApp{SystemApp: flexString(tt.in), IsManaged: flexString(tt.in), MandatoryApp: flexString(tt.in)}
 		if a.System() != tt.want || a.Managed() != tt.want || a.Mandatory() != tt.want {
 			t.Errorf("flag(%q) != %v", tt.in, tt.want)
 		}
@@ -57,7 +57,7 @@ func TestSelectDeviceAppListPages(t *testing.T) {
 		}
 		ok(w, `{"devicelist":[`+strings.TrimSuffix(strings.Repeat(`{"packageName":"com.a","systemApp":"Y"},`, n), ",")+`],"total":"1005"}`)
 	}
-	apps, _, err := c.SelectDeviceAppList(context.Background(), "dev1")
+	apps, _, _, err := c.SelectDeviceAppList(context.Background(), "dev1")
 	if err != nil || len(apps) != 1005 || strings.Join(starts, ",") != "0,1000" || !apps[0].System() {
 		t.Fatalf("got %d apps, starts %v, err %v", len(apps), starts, err)
 	}
@@ -68,7 +68,7 @@ func TestSelectDeviceAppListPages(t *testing.T) {
 		starts = append(starts, v.Get("start"))
 		ok(w, `{"devicelist":[`+strings.TrimSuffix(strings.Repeat(`{"packageName":"com.a"},`, 1000), ",")+`]}`)
 	}
-	if _, _, err := c.SelectDeviceAppList(context.Background(), "dev1"); err != nil || len(starts) != maxAppPages {
+	if _, _, _, err := c.SelectDeviceAppList(context.Background(), "dev1"); err != nil || len(starts) != maxAppPages {
 		t.Fatalf("pages = %d (%s), err %v", len(starts), strconv.Itoa(maxAppPages), err)
 	}
 }
@@ -115,8 +115,9 @@ func TestSelectDeviceAppListDiagnostic(t *testing.T) {
 		want        *AppListDiagnostic
 	}{
 		{"normal list", `{"devicelist":[{"packageName":"com.a"}],"total":"1"}`, nil},
-		{"alternate key", `{"devicelist":[],"appList":[{"packageName":"com.secret.name"}],"total":"0"}`,
-			&AppListDiagnostic{ResultType: "object", Keys: map[string]string{"devicelist": "array", "appList": "array", "total": "string"}, Total: "0", AppKeys: []string{"appList"}}},
+		{"real shape", `{"appList":[{"packageName":"com.a"}],"total":1}`, nil},
+		{"alternate key", `{"devicelist":[],"apps":[{"packageName":"com.secret.name"}],"total":"0"}`,
+			&AppListDiagnostic{ResultType: "object", Keys: map[string]string{"devicelist": "array", "apps": "array", "total": "string"}, Total: "0", AppKeys: []string{"apps"}}},
 		{"no list numeric total", `{"total":3,"note":"x"}`,
 			&AppListDiagnostic{ResultType: "object", Keys: map[string]string{"total": "number", "note": "string"}, Total: "3"}},
 		{"not an object", `"nothing"`, &AppListDiagnostic{ResultType: "string", Keys: map[string]string{}}},
@@ -125,7 +126,7 @@ func TestSelectDeviceAppListDiagnostic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f, c := newFake(t)
 			f.api = func(w http.ResponseWriter, r *http.Request, v url.Values) { ok(w, tt.value) }
-			_, got, err := c.SelectDeviceAppList(context.Background(), "dev1")
+			_, got, _, err := c.SelectDeviceAppList(context.Background(), "dev1")
 			if err != nil || !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("diag = %+v, %v; want %+v", got, err, tt.want)
 			}

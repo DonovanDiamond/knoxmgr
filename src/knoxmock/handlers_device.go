@@ -81,7 +81,8 @@ func (s *Server) selectDeviceAppList(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.mu.Unlock()
 	apps := deviceApps(d)
-	ok(w, map[string]any{"total": strconv.Itoa(len(apps)), "devicelist": window(apps, start, limit)})
+	// Real Knox differs from the spec: appList and a numeric total.
+	ok(w, map[string]any{"total": len(apps), "appList": window(apps, start, limit)})
 }
 
 // androidDevice is knownDevice plus the "runs on Android" rule of the app commands. Caller holds

@@ -37,19 +37,42 @@ type DeviceDetail struct {
 // DeviceApp is one installed application. The spec types systemApp, isManaged and mandatoryApp
 // as plain strings without listing values, so read them through System, Managed and Mandatory.
 type DeviceApp struct {
-	AppName      string `json:"appName"`
-	PackageName  string `json:"packageName"`
-	VersionName  string `json:"versionName"`
-	SystemApp    string `json:"systemApp"`
-	IsManaged    string `json:"isManaged"`
-	MandatoryApp string `json:"mandatoryApp"`
-	Installed    string `json:"stdFormatInstalled"` // UTC ISO 8601
-	KnoxID       string `json:"knoxId"`             // empty for the default area
+	AppName      flexString `json:"appName"`
+	PackageName  flexString `json:"packageName"`
+	VersionName  flexString `json:"versionName"`
+	SystemApp    flexString `json:"systemApp"`
+	IsManaged    flexString `json:"isManaged"`
+	MandatoryApp flexString `json:"mandatoryApp"`
+	Installed    flexString `json:"stdFormatInstalled"` // UTC ISO 8601
+	KnoxID       flexString `json:"knoxId"`             // empty for the default area
+}
+
+// flexString reads a JSON string, number or boolean as text and anything else (null, object,
+// array) as empty. The real selectDeviceAppList item types differ from the spec and are not all
+// confirmed, so one odd type must not fail a whole device.
+type flexString string
+
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	switch b = bytes.TrimSpace(b); {
+	case len(b) == 0:
+		*f = ""
+	case b[0] == '"':
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = flexString(s)
+	case b[0] == 't', b[0] == 'f', b[0] == '-', b[0] >= '0' && b[0] <= '9':
+		*f = flexString(b)
+	default:
+		*f = ""
+	}
+	return nil
 }
 
 // flag reads Knox's loosely typed booleans: Y/N, true/false or 1/0.
-func flag(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
+func flag(v flexString) bool {
+	switch strings.ToLower(strings.TrimSpace(string(v))) {
 	case "y", "yes", "true", "1":
 		return true
 	}
@@ -94,7 +117,7 @@ type AppListDiagnostic struct {
 	ResultType string            // type of resultValue when it is not an object
 	Keys       map[string]string // resultValue key -> JSON type
 	Total      string            // the numeric total, "" when absent or not a number
-	AppKeys    []string          // arrays other than devicelist whose items have a packageName
+	AppKeys    []string          // arrays other than appList and devicelist whose items have a packageName
 }
 
 // jsonType names the JSON type of a raw value.
@@ -127,7 +150,7 @@ func diagnoseAppList(raw json.RawMessage, fields map[string]json.RawMessage) *Ap
 	d.ResultType = "object"
 	for k, v := range fields {
 		d.Keys[k] = jsonType(v)
-		if k == "devicelist" {
+		if k == "appList" || k == "devicelist" {
 			continue
 		}
 		var items []struct {
@@ -152,38 +175,62 @@ func diagnoseAppList(raw json.RawMessage, fields map[string]json.RawMessage) *Ap
 	return d
 }
 
-// SelectDeviceAppList lists all of a device's applications, paging through
-// POST /device/selectDeviceAppList. When Knox answers success with no apps the diagnostic is
-// non-nil; otherwise it is nil.
-func (c *Client) SelectDeviceAppList(ctx context.Context, deviceID string) ([]DeviceApp, *AppListDiagnostic, error) {
-	if err := requireDeviceID(deviceID); err != nil {
-		return nil, nil, err
+// itemShape maps the key names of a raw app item to their JSON types, never values.
+func itemShape(raw json.RawMessage) map[string]string {
+	var item map[string]json.RawMessage
+	if json.Unmarshal(raw, &item) != nil {
+		return nil
 	}
-	var apps []DeviceApp
-	var diag *AppListDiagnostic
+	shape := make(map[string]string, len(item))
+	for k, v := range item {
+		shape[k] = jsonType(v)
+	}
+	return shape
+}
+
+// SelectDeviceAppList lists all of a device's applications, paging through
+// POST /device/selectDeviceAppList. Real Knox answers {"appList": [...], "total": <number>}, unlike
+// the spec's devicelist and string total; devicelist is read as a fallback. When Knox answers
+// success with no apps the diagnostic is non-nil. shape holds the first item's key names and JSON
+// types (nil when there are no apps).
+func (c *Client) SelectDeviceAppList(ctx context.Context, deviceID string) (apps []DeviceApp, diag *AppListDiagnostic, shape map[string]string, err error) {
+	if err := requireDeviceID(deviceID); err != nil {
+		return nil, nil, nil, err
+	}
 	for page := 0; page < maxAppPages; page++ {
 		raw, err := call[json.RawMessage](ctx, c, http.MethodPost, "/device/selectDeviceAppList",
 			url.Values{"deviceId": {deviceID}, "start": {strconv.Itoa(page * appPageSize)}, "limit": {strconv.Itoa(appPageSize)}})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(raw, &fields) // a non-object resultValue is reported by the diagnostic
+		items, found := fields["appList"]
+		if !found {
+			items, found = fields["devicelist"]
+		}
 		var list []DeviceApp
-		if v, ok := fields["devicelist"]; ok {
-			if err := json.Unmarshal(v, &list); err != nil {
-				return nil, nil, errors.New("knox: /device/selectDeviceAppList returned an unreadable response")
+		if found {
+			if err := json.Unmarshal(items, &list); err != nil {
+				return nil, nil, nil, errors.New("knox: /device/selectDeviceAppList returned an unreadable response")
 			}
 		}
-		if page == 0 && len(list) == 0 {
-			diag = diagnoseAppList(raw, fields)
+		if page == 0 {
+			if len(list) == 0 {
+				diag = diagnoseAppList(raw, fields)
+			} else {
+				var rawItems []json.RawMessage
+				if json.Unmarshal(items, &rawItems) == nil && len(rawItems) > 0 {
+					shape = itemShape(rawItems[0])
+				}
+			}
 		}
 		apps = append(apps, list...)
 		if len(list) < appPageSize {
 			break
 		}
 	}
-	return apps, diag, nil
+	return apps, diag, shape, nil
 }
 
 // SelectDeviceLocation fetches the device's latest GPS fix (POST /device/selectDeviceLocation).

@@ -82,8 +82,8 @@ func TestDeviceAppList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := call(tt.id, tt.form)
-			list := v["devicelist"].([]any)
-			total, _ := strconv.Atoi(v["total"].(string))
+			list := v["appList"].([]any)
+			total := int(v["total"].(float64))
 			if total < tt.minTotal || total > tt.maxTotal {
 				t.Fatalf("total %d outside %d-%d", total, tt.minTotal, tt.maxTotal)
 			}

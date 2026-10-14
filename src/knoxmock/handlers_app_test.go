@@ -16,7 +16,7 @@ const (
 
 func appPackages(e *env, id string) map[string]map[string]any {
 	out := map[string]map[string]any{}
-	for _, a := range e.value("POST", "/emm/oapi/device/selectDeviceAppList", url.Values{"deviceId": {id}})["devicelist"].([]any) {
+	for _, a := range e.value("POST", "/emm/oapi/device/selectDeviceAppList", url.Values{"deviceId": {id}})["appList"].([]any) {
 		m := a.(map[string]any)
 		out[m["packageName"].(string)] = m
 	}
