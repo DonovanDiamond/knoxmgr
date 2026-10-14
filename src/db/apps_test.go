@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -346,5 +347,42 @@ func TestMandatoryAndSummaryFlags(t *testing.T) {
 	}
 	if got != 1 {
 		t.Fatalf("mandatory devices = %d", got)
+	}
+}
+
+func TestAppNameMajorityAndAlternates(t *testing.T) {
+	tests := []struct {
+		name     string
+		names    []string // one device each
+		wantName string
+		wantAlts []string
+	}{
+		{"single", []string{"Gallery"}, "Gallery", []string{}},
+		{"majority wins", []string{"Galería", "Gallery", "Gallery"}, "Gallery", []string{"Galería"}},
+		{"tie goes alphabetical", []string{"Galería", "Gallery"}, "Galería", []string{"Gallery"}},
+		{"alternates by count then alpha", []string{"A", "B", "B", "C", "C", "C", "D"}, "C", []string{"B", "A", "D"}},
+		{"empty names ignored", []string{"", "Gallery", ""}, "Gallery", []string{}},
+		{"all empty", []string{""}, "", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _ := newApps(t)
+			for i, n := range tt.names {
+				id := fmt.Sprintf("dn%d", i)
+				if _, err := a.db.Exec(a.db.Rebind(`INSERT INTO knox_devices (device_id, synced_at) VALUES (?, ?)`), id, formatTime(time.Now())); err != nil {
+					t.Fatal(err)
+				}
+				if err := a.ReplaceDeviceApps(ctx0, id, []DeviceAppRow{{Package: "com.gal", Name: n}}, time.Now()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s, err := a.App(ctx0, nil, "com.gal")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Name != tt.wantName || !reflect.DeepEqual(s.AlternateNames, tt.wantAlts) {
+				t.Errorf("name %q alts %v, want %q %v", s.Name, s.AlternateNames, tt.wantName, tt.wantAlts)
+			}
+		})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -59,6 +60,9 @@ type AppSummary struct {
 	DeviceCount int    `db:"device_count"`
 	Managed     bool   `db:"managed"`   // on at least one in-scope device
 	Mandatory   bool   `db:"mandatory"` // on at least one in-scope device
+	// AlternateNames are the other distinct non-empty names devices report for the package; Name is
+	// the most common one.
+	AlternateNames []string `db:"-"`
 }
 
 // AppDevice is one in-scope device that has an app installed.
@@ -162,7 +166,7 @@ const appScopeFrom = `FROM device_apps a
 
 func (a *Apps) summaries(ctx context.Context, orgs []string, pkg string) ([]AppSummary, error) {
 	out := []AppSummary{}
-	query, args := `SELECT a.package, MAX(a.name) AS name, MAX(a.system) AS system,
+	query, args := `SELECT a.package, '' AS name, MAX(a.system) AS system,
 			CASE WHEN MAX(a.system) = 1 THEN '`+SystemCategory+`' ELSE COALESCE(c.name, '`+otherCategory+`') END AS category,
 			m.category_id AS category_id, COUNT(*) AS device_count,
 			MAX(a.managed) AS managed, MAX(a.mandatory) AS mandatory
@@ -178,8 +182,70 @@ func (a *Apps) summaries(ctx context.Context, orgs []string, pkg string) ([]AppS
 	if err != nil || !ok {
 		return out, err
 	}
-	err = a.db.SelectContext(ctx, &out, a.db.Rebind(q+" GROUP BY a.package, m.category_id, c.name ORDER BY MAX(a.name), a.package"), args...)
-	return out, err
+	err = a.db.SelectContext(ctx, &out, a.db.Rebind(q+" GROUP BY a.package, m.category_id, c.name"), args...)
+	if err != nil {
+		return out, err
+	}
+	names, err := a.appNames(ctx, orgs, pkg)
+	if err != nil {
+		return out, err
+	}
+	for i := range out {
+		out[i].Name, out[i].AlternateNames = pickNames(names[out[i].Package])
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Package < out[j].Package
+	})
+	return out, nil
+}
+
+type nameCount struct {
+	Package string `db:"package"`
+	Name    string `db:"name"`
+	N       int    `db:"n"`
+}
+
+// appNames counts, per package, how many in-scope devices report each non-empty name.
+func (a *Apps) appNames(ctx context.Context, orgs []string, pkg string) (map[string][]nameCount, error) {
+	query, args := "SELECT a.package, a.name, COUNT(*) AS n "+appScopeFrom+" WHERE a.name <> ''", []any(nil)
+	if pkg != "" {
+		query += " AND a.package = ?"
+		args = append(args, pkg)
+	}
+	q, args, ok, err := scoped(query, args, orgs)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var rows []nameCount
+	if err := a.db.SelectContext(ctx, &rows, a.db.Rebind(q+" GROUP BY a.package, a.name"), args...); err != nil {
+		return nil, err
+	}
+	out := map[string][]nameCount{}
+	for _, r := range rows {
+		out[r.Package] = append(out[r.Package], r)
+	}
+	return out, nil
+}
+
+// pickNames returns the most common name (ties: alphabetically first) and the rest ordered the same way.
+func pickNames(counts []nameCount) (string, []string) {
+	sort.Slice(counts, func(i, j int) bool {
+		if counts[i].N != counts[j].N {
+			return counts[i].N > counts[j].N
+		}
+		return counts[i].Name < counts[j].Name
+	})
+	alts := []string{}
+	for _, c := range counts[min(1, len(counts)):] {
+		alts = append(alts, c.Name)
+	}
+	if len(counts) == 0 {
+		return "", alts
+	}
+	return counts[0].Name, alts
 }
 
 func (a *Apps) Apps(ctx context.Context, orgs []string, f AppFilter) ([]AppSummary, error) {

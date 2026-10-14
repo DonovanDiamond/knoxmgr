@@ -151,11 +151,17 @@
 			<ul>
 				{#each rows as a (a.package)}
 					{@const reason = uninstallReason(a)}
-					<li class="row !items-start">
-						<span class="mt-1 flex-none"><AppIcon name={a.name} pkg={a.package} size="md" /></span>
+					<li class="row">
+						<span class="flex-none"><AppIcon name={a.name} pkg={a.package} size="md" /></span>
 						<span class="rowmain">
-							<span class="nm !whitespace-normal break-words">{a.name}</span>
-							<span class="sub !whitespace-normal break-all">{a.package}{a.version ? ` · ${a.version}` : ''}</span>
+							<span class="nm truncate" title={a.name}>{a.name}</span>
+							<span class="sub" title={a.package}>{a.package}{a.version ? ` · ${a.version}` : ''}</span>
+							{#if !a.managed || a.system}
+								<span class="flex flex-wrap items-center gap-x-2">
+									{#if !a.managed}<span class="sub flex-none">Not managed by Knox</span>{/if}
+									{#if a.system}<span class="badge flex-none">System</span>{/if}
+								</span>
+							{/if}
 							{#if a.uninstallRequested}<span class="sub">Uninstall requested</span>{/if}
 						</span>
 						{#if a.protected}<span class="badge flex-none" title={a.protectedReason}>Protected</span>{/if}

@@ -148,12 +148,15 @@
 	<div class="mb-4 flex items-center gap-4">
 		<AppIcon name={app.name} pkg={app.package} size="lg" />
 		<div class="min-w-0">
-			<p class="text-[20px] font-bold break-words">{app.name}</p>
+			<p class="text-[20px] font-bold break-words">{app.name}{#if app.alternateNames.length}{' '}<span class="muted text-[15px] font-normal">({app.alternateNames.join(', ')})</span>{/if}</p>
 			<p class="muted text-[15px] break-all">{app.package}</p>
-			{#if app.system}<p class="muted text-[14px]">System app</p>{/if}
-			{#if app.protected}<span class="badge mt-1" title={app.protectedReason}>Protected</span>{/if}
+			<div class="mt-1 flex flex-wrap gap-2">
+				{#if app.system}<span class="badge">System</span>{/if}
+				{#if app.protected}<span class="badge" title={app.protectedReason}>Protected</span>{/if}
+			</div>
 		</div>
 	</div>
+	{#if !app.managed}<p class="muted mb-4 text-[15px]">This app is not managed by Knox</p>{/if}
 
 	<div class="mb-4 flex flex-wrap items-end gap-x-8 gap-y-3">
 		<div>
@@ -194,7 +197,7 @@
 				<span class="rowmain">
 					<a href="/devices/{encodeURIComponent(d.deviceId)}" class="nm">{d.deviceModel || d.deviceId}</a>
 					<span class="sub">
-						{#if d.userId}<a href="/users/{encodeURIComponent(d.userId)}" class="link">{d.userName || d.userId}</a> · {/if}{d.platform} · v{d.version || '?'}
+						{#if d.userId}<a href="/users/{encodeURIComponent(d.userId)}" class="link">{d.userName || d.userId}</a>{' · '}{/if}{d.platform} · v{d.version || '?'}
 					</span>
 					<span class="sub">Last connection: {when(d)}</span>
 					{#if access.canWrite && why && !d.uninstallRequested}<span class="sub">{why}</span>{/if}

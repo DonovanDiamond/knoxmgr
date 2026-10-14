@@ -38,15 +38,15 @@ type appSummaryView struct {
 	DeviceCount int    `json:"deviceCount"`
 	Managed     bool   `json:"managed"`
 	Mandatory   bool   `json:"mandatory"`
-	Protected   bool   `json:"protected"`
+	// AlternateNames is always an array, never null.
+	AlternateNames []string `json:"alternateNames"`
+	Protected      bool     `json:"protected"`
 	// ProtectedReason is shown to the user; empty when the app can be uninstalled.
 	ProtectedReason string `json:"protectedReason"`
 }
 
-const categoryDeviceManagement = "Device management"
-
 // mdmPackages and mdmPrefixes name the Knox/MDM agents that must never be uninstalled remotely,
-// whatever Knox reports for them.
+// whatever Knox reports for them. Everything else is left to Knox, whose refusal is shown per device.
 var (
 	mdmPackages = map[string]bool{
 		"com.samsung.android.knox.kmagent":        true,
@@ -57,17 +57,8 @@ var (
 )
 
 // protectedReason says why pkg must not be uninstalled, or "" when it may be.
-func protectedReason(pkg, category string, system, managed, mandatory bool) string {
-	switch {
-	case system:
-		return "System apps cannot be uninstalled."
-	case managed:
-		return "This app is managed by Knox. Remove it from the Knox policy instead."
-	case mandatory:
-		return "This app is mandatory in the Knox policy."
-	case category == categoryDeviceManagement:
-		return "This app is part of device management."
-	case mdmPackages[pkg]:
+func protectedReason(pkg string) string {
+	if mdmPackages[pkg] {
 		return "This is a Knox management component."
 	}
 	for _, p := range mdmPrefixes {
@@ -83,8 +74,12 @@ func errAppProtected(reason string) error {
 }
 
 func appSummaryOf(a db.AppSummary) appSummaryView {
-	reason := protectedReason(a.Package, a.Category, a.System, a.Managed, a.Mandatory)
-	return appSummaryView{a.Package, a.Name, a.System, a.Category, a.CategoryID, a.DeviceCount, a.Managed, a.Mandatory, reason != "", reason}
+	reason := protectedReason(a.Package)
+	alts := a.AlternateNames
+	if alts == nil {
+		alts = []string{}
+	}
+	return appSummaryView{a.Package, a.Name, a.System, a.Category, a.CategoryID, a.DeviceCount, a.Managed, a.Mandatory, alts, reason != "", reason}
 }
 
 type appDeviceView struct {
@@ -209,7 +204,7 @@ func (s *server) uninstallOne(c fiber.Ctx, sc auth.Scope, id, pkg string) string
 	if row == nil {
 		return "app not installed on this device"
 	}
-	if reason := protectedReason(pkg, row.Category, row.System, row.Managed, row.Mandatory); reason != "" {
+	if reason := protectedReason(pkg); reason != "" {
 		return reason
 	}
 	if err := s.Knox().UninstallApp(c.Context(), id, pkg, row.KnoxID); err != nil {
@@ -243,14 +238,10 @@ func (s *server) uninstallApp(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	app, err := s.Apps.App(c.Context(), orgs, pkg)
-	if err != nil {
+	if _, err := s.Apps.App(c.Context(), orgs, pkg); err != nil {
 		return err
 	}
-	if app.System {
-		return badRequest("system apps cannot be uninstalled")
-	}
-	if reason := protectedReason(pkg, app.Category, app.System, app.Managed, app.Mandatory); reason != "" {
+	if reason := protectedReason(pkg); reason != "" {
 		return errAppProtected(reason)
 	}
 	results := make([]uninstallResult, len(ids))
@@ -306,7 +297,7 @@ func (s *server) deviceApps(c fiber.Ctx) error {
 	}
 	apps := make([]deviceAppView, len(rows))
 	for i, r := range rows {
-		reason := protectedReason(r.Package, r.Category, r.System, r.Managed, r.Mandatory)
+		reason := protectedReason(r.Package)
 		apps[i] = deviceAppView{r.Package, r.Name, r.Version, r.System, r.Managed, r.Mandatory, r.InstalledAt, r.Category, r.CategoryID,
 			r.UninstallRequestedAt != nil, reason != "", reason}
 	}

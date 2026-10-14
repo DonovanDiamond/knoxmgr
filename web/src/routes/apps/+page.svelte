@@ -44,7 +44,6 @@
 			sortDir = k === 'deviceCount' ? -1 : 1;
 		}
 	}
-	const ariaSort = (k: SortKey) => (sortKey === k ? (sortDir === 1 ? 'ascending' : 'descending') : 'none');
 
 	const visible = $derived.by(() => {
 		const needle = q.trim().toLowerCase();
@@ -52,7 +51,7 @@
 			(a) =>
 				(showSystem || !a.system) &&
 				(!category || (a.category || 'Other') === category) &&
-				(!needle || `${a.name} ${a.package}`.toLowerCase().includes(needle))
+				(!needle || `${a.name} ${a.alternateNames.join(' ')} ${a.package}`.toLowerCase().includes(needle))
 		);
 		return rows.sort((a, b) => {
 			const x = a[sortKey];
@@ -71,10 +70,12 @@
 		return [...m.entries()].sort(([a], [b]) => compareCategories(a, b));
 	});
 
-	const cols: [SortKey, string, string][] = [
-		['name', 'Name', ''],
-		['package', 'Package', 'hidden md:table-cell'],
-		['deviceCount', 'Devices', 'w-24 text-right']
+	const appTitle = (a: AppSummary) => [a.name, ...a.alternateNames].join(' / ');
+
+	const cols: [SortKey, string][] = [
+		['name', 'Name'],
+		['package', 'Package'],
+		['deviceCount', 'Devices']
 	];
 </script>
 
@@ -110,37 +111,31 @@
 {:else}
 	<p class="muted py-2 text-[15px]" aria-live="polite">{visible.length} {visible.length === 1 ? 'app' : 'apps'}{q ? ' match' : ''}</p>
 	{#if groups.length}
-		<table class="w-full table-fixed text-left">
-			<thead>
-				<tr class="muted text-[14px]">
-					<th class="w-14"><span class="sr-only">Icon</span></th>
-					{#each cols as [k, label, cls] (k)}
-						<th class={cls} aria-sort={ariaSort(k)}>
-							<button type="button" class="min-h-11 font-semibold" onclick={() => sortBy(k)}>
-								{label}{sortKey === k ? (sortDir === 1 ? ' ▲' : ' ▼') : ''}
-							</button>
-						</th>
-					{/each}
-				</tr>
-			</thead>
-			{#each groups as [cat, rows] (cat)}
-				<tbody>
-					<tr><th colspan="4" scope="colgroup" class="pt-4 pb-1 text-[18px] font-bold">{cat}</th></tr>
-					{#each rows as a (a.package)}
-						<tr class="row-hover relative border-t" style="border-color: var(--line)">
-							<td class="py-2 pr-3"><AppIcon name={a.name} pkg={a.package} /></td>
-							<td class="py-2 pr-3">
-								<a href="/apps/{encodeURIComponent(a.package)}" class="font-semibold after:absolute after:inset-0">{a.name}</a>
-								{#if a.protected}<span class="badge ml-2 align-middle" title={a.protectedReason}>Protected</span>{/if}
-								<span class="muted block text-[14px] break-all md:hidden">{a.package}</span>
-							</td>
-							<td class="muted hidden py-2 pr-3 text-[14px] break-all md:table-cell">{a.package}</td>
-							<td class="py-2 text-right font-semibold">{a.deviceCount}</td>
-						</tr>
-					{/each}
-				</tbody>
+		<div class="muted flex items-center gap-2 text-[14px]">
+			<span class="mr-1">Sort by</span>
+			{#each cols as [k, label] (k)}
+				<button type="button" class="min-h-11 px-2 font-semibold" onclick={() => sortBy(k)}>
+					{label}{sortKey === k ? (sortDir === 1 ? ' ▲' : ' ▼') : ''}
+				</button>
 			{/each}
-		</table>
+		</div>
+		{#each groups as [cat, rows] (cat)}
+			<h2 class="pt-4 pb-1 text-[18px] font-bold">{cat}</h2>
+			<ul>
+				{#each rows as a (a.package)}
+					<li class="row row-hover">
+						<span class="flex-none"><AppIcon name={a.name} pkg={a.package} /></span>
+						<span class="rowmain">
+							<a href="/apps/{encodeURIComponent(a.package)}" class="nm truncate after:absolute after:inset-0" title={appTitle(a)}>{a.name}{#if a.alternateNames.length}{' '}<span class="muted text-[14px] font-normal">({a.alternateNames.join(', ')})</span>{/if}</a>
+							<span class="sub" title={a.package}>{a.package}</span>
+						</span>
+						{#if a.system}<span class="badge flex-none">System</span>{/if}
+						{#if a.protected}<span class="badge flex-none" title={a.protectedReason}>Protected</span>{/if}
+						<span class="w-12 flex-none text-right font-semibold">{a.deviceCount}</span>
+					</li>
+				{/each}
+			</ul>
+		{/each}
 	{:else}
 		<div class="py-14 text-center">
 			<p class="text-[20px] font-semibold">{apps.length ? 'No app matches' : 'No apps yet'}</p>

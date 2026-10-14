@@ -350,6 +350,12 @@ var systemCatalog = [][2]string{
 
 const knoxAgentPackage = "com.samsung.android.knox.kmagent"
 
+// altNamePackage is a non-system app that some devices report as altName instead of its usual name.
+const (
+	altNamePackage = "com.google.android.apps.photos"
+	altName        = "Fotos"
+)
+
 var userCatalog = [][2]string{
 	{"Chrome", "com.android.chrome"}, {"Gmail", "com.google.android.gm"}, {"Microsoft Teams", "com.microsoft.teams"},
 	{"Outlook", "com.microsoft.office.outlook"}, {"Google Maps", "com.google.android.apps.maps"}, {"WhatsApp", "com.whatsapp"},
@@ -376,6 +382,10 @@ func deviceApps(d *device) []map[string]any {
 		return d.apps
 	}
 	add := func(a [2]string, system bool) {
+		// Real fleets report localized names for one package; this one shows the alternates in the UI.
+		if a[1] == altNamePackage && seedHash(d.DeviceID, "altname")%4 == 0 {
+			a[0] = altName
+		}
 		h := seedHash(d.DeviceID, a[1])
 		installed := time.Now().UTC().Add(-time.Duration(1+h%200) * 24 * time.Hour)
 		yn := map[bool]string{true: "Y", false: "N"}

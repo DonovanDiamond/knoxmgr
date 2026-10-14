@@ -114,3 +114,16 @@ func TestAppCommandsRejectNonAndroid(t *testing.T) {
 		t.Error("iOS device has Android apps")
 	}
 }
+
+func TestAlternateAppName(t *testing.T) {
+	e := newEnv(t)
+	names := map[string]int{}
+	for _, id := range []string{"dev-alice-phone", "dev-alice-tab", "dev-bob-phone", "dev-carol-phone", "dev-frank-phone"} {
+		if a := appPackages(e, id)[altNamePackage]; a != nil {
+			names[a["appName"].(string)]++
+		}
+	}
+	if names["Google Photos"] <= names[altName] || names[altName] == 0 {
+		t.Errorf("names for %s = %v, want a majority of Google Photos and at least one %s", altNamePackage, names, altName)
+	}
+}

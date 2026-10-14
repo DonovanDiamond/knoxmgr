@@ -100,7 +100,6 @@ func TestAppsUninstall(t *testing.T) {
 		{"admin any device", "root", "com.android.chrome", `{"deviceIds":["dev-alice-phone","dev-spare","nope"]}`, 200,
 			map[string]bool{"dev-alice-phone": true, "dev-spare": true, "nope": false}},
 		{"app not on device", "root", "com.android.chrome", `{"deviceIds":["dev-bob-phone"]}`, 200, map[string]bool{"dev-bob-phone": false}},
-		{"system app refused", "root", "com.sys.app", `{"deviceIds":["dev-carol-phone"]}`, 400, nil},
 		{"unknown app", "root", "com.nope.app", `{"deviceIds":["dev-carol-phone"]}`, 404, nil},
 		{"bad package", "root", "bad", `{"deviceIds":["dev-carol-phone"]}`, 400, nil},
 		{"empty list", "root", "com.android.chrome", `{"deviceIds":[]}`, 400, nil},
@@ -359,14 +358,10 @@ func TestAppCategories(t *testing.T) {
 
 func TestProtectedReason(t *testing.T) {
 	tests := []struct {
-		name, pkg, category            string
-		system, managed, mandatory, ok bool
+		name, pkg string
+		ok        bool
 	}{
-		{name: "plain app", pkg: "com.android.chrome", category: "Other", ok: true},
-		{name: "system", pkg: "com.android.chrome", system: true},
-		{name: "managed", pkg: "com.android.chrome", managed: true},
-		{name: "mandatory", pkg: "com.android.chrome", mandatory: true},
-		{name: "device management category", pkg: "com.android.chrome", category: "Device management"},
+		{name: "plain app", pkg: "com.android.chrome", ok: true},
 		{name: "kmagent", pkg: "com.samsung.android.knox.kmagent"},
 		{name: "containeragent", pkg: "com.samsung.android.knox.containeragent"},
 		{name: "klmsagent", pkg: "com.samsung.klmsagent"},
@@ -378,7 +373,7 @@ func TestProtectedReason(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := protectedReason(tt.pkg, tt.category, tt.system, tt.managed, tt.mandatory)
+			got := protectedReason(tt.pkg)
 			if (got == "") != tt.ok {
 				t.Errorf("reason %q, want allowed=%v", got, tt.ok)
 			}
@@ -404,9 +399,7 @@ func TestAppsUninstallProtected(t *testing.T) {
 		category  string
 	}{
 		{"kmagent", "com.samsung.android.knox.kmagent", db.DeviceAppRow{}, ""},
-		{"managed", "com.corp.managed", db.DeviceAppRow{Managed: true}, ""},
-		{"mandatory", "com.corp.mandatory", db.DeviceAppRow{Mandatory: true}, ""},
-		{"device management category", "com.corp.mdm", db.DeviceAppRow{}, "Device management"},
+		{"knox prefix", "com.samsung.android.knox.other", db.DeviceAppRow{}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

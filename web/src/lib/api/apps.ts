@@ -6,6 +6,7 @@ const seg = encodeURIComponent;
 export interface AppSummary {
 	package: string;
 	name: string;
+	alternateNames: string[];
 	system: boolean;
 	managed: boolean;
 	mandatory: boolean;
