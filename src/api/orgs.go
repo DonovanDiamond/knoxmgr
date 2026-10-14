@@ -30,11 +30,15 @@ type orgFields struct {
 	ParentCode string `json:"parentCode"`
 }
 
-// validateOrg requires a name and an existing parent. self is the org's own code ("" on create);
-// its descendants are refused too, as a parent there would make a cycle.
-func (s *server) validateOrg(c fiber.Ctx, f orgFields, self string) error {
+// validateOrg requires a name and an existing parent. self is the org being updated (zero on
+// create); its descendants are refused as parents too, as that would make a cycle. A top-level
+// org keeps an empty parent; any other org must have one.
+func (s *server) validateOrg(c fiber.Ctx, f orgFields, self db.MirrorOrg) error {
 	if err := checkText("orgName", f.OrgName, maxOrgName, true); err != nil {
 		return err
+	}
+	if self.OrgCode != "" && self.ParentCode == "" && f.ParentCode == "" {
+		return nil
 	}
 	if err := checkPattern(orgCodeRe, "parentCode", f.ParentCode); err != nil {
 		return err
@@ -45,10 +49,10 @@ func (s *server) validateOrg(c fiber.Ctx, f orgFields, self string) error {
 		}
 		return err
 	}
-	if self == "" {
+	if self.OrgCode == "" {
 		return nil
 	}
-	tree, err := s.Mirror.SubOrgCodes(c.Context(), self)
+	tree, err := s.Mirror.SubOrgCodes(c.Context(), self.OrgCode)
 	if err != nil {
 		return err
 	}
@@ -92,7 +96,7 @@ func (s *server) createOrg(c fiber.Ctx) error {
 	if err := checkPattern(orgCodeRe, "orgCode", req.OrgCode); err != nil {
 		return err
 	}
-	if err := s.validateOrg(c, req.orgFields, ""); err != nil {
+	if err := s.validateOrg(c, req.orgFields, db.MirrorOrg{}); err != nil {
 		return err
 	}
 	if _, err := s.Mirror.Org(c.Context(), req.OrgCode); err == nil {
@@ -118,7 +122,7 @@ func (s *server) updateOrg(c fiber.Ctx) error {
 	if err := bind(c, &req); err != nil {
 		return err
 	}
-	if err := s.validateOrg(c, req, old.OrgCode); err != nil {
+	if err := s.validateOrg(c, req, old); err != nil {
 		return err
 	}
 	if err := s.Knox().UpdateOrg(c.Context(), old.OrgCode, req.OrgName, req.ParentCode); err != nil {

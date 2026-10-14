@@ -53,7 +53,7 @@
 	function openCreate() {
 		code = '';
 		name = '';
-		parent = '';
+		parent = orgs.tree()[0]?.org.orgCode ?? '';
 		codeError = nameError = formError = '';
 		createOpen = true;
 	}
@@ -132,12 +132,12 @@
 		<div class="mt-4 flex flex-col gap-4">
 			<Field id="ocode" label="Organization code" bind:value={code} error={codeError} hint="Cannot be changed later." />
 			<Field id="oname" label="Organization name" bind:value={name} error={nameError} />
-			<OrgSelect id="oparent" label="Parent organization" bind:value={parent} allLabel="No parent (top level)" />
+			<OrgSelect id="oparent" label="Parent organization" bind:value={parent} placeholder="Choose a parent" />
 		</div>
 		{#if formError}<p class="err" role="alert">{formError}</p>{/if}
 		<div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 			<button type="button" class="btn btn-soft2" onclick={() => (createOpen = false)}>Cancel</button>
-			<button type="submit" class="btn btn-primary" disabled={creating}>Create organization</button>
+			<button type="submit" class="btn btn-primary" disabled={creating || !parent}>Create organization</button>
 		</div>
 	</form>
 </Dialog>

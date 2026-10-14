@@ -70,6 +70,8 @@ func TestOrgRoutes(t *testing.T) {
 		{"create existing", "root", "POST", "/api/knox/orgs", `{"orgCode":"SALES","orgName":"New","parentCode":"ROOT"}`, 409, ""},
 
 		{"update", "root", "PUT", "/api/knox/orgs/SUPPORT", `{"orgName":"Help","parentCode":"SALES"}`, 200, "update SUPPORT Help SALES"},
+		{"update top-level keeps top-level", "root", "PUT", "/api/knox/orgs/ROOT", `{"orgName":"Renamed","parentCode":""}`, 200, "update ROOT Renamed "},
+		{"update sub-org to top-level", "root", "PUT", "/api/knox/orgs/SUPPORT", `{"orgName":"Help","parentCode":""}`, 400, ""},
 		{"update write user", "writer", "PUT", "/api/knox/orgs/SALES_EMEA", `{"orgName":"x","parentCode":"SALES"}`, 403, ""},
 		{"update self parent", "root", "PUT", "/api/knox/orgs/SALES", `{"orgName":"x","parentCode":"SALES"}`, 400, ""},
 		{"update under descendant", "root", "PUT", "/api/knox/orgs/SALES", `{"orgName":"x","parentCode":"SALES_EMEA"}`, 400, ""},

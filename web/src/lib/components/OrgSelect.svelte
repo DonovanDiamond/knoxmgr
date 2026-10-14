@@ -7,6 +7,7 @@
 		label,
 		value = $bindable(''),
 		root = null,
+		exclude = null,
 		allLabel,
 		placeholder,
 		disabled = false,
@@ -16,6 +17,8 @@
 		label: string;
 		value?: string;
 		root?: string | null;
+		/** Hides this org and its sub-orgs (a parent picker must not offer the org's own subtree). */
+		exclude?: string | null;
 		/** Adds a leading option with value "" (a filter's "everything"). */
 		allLabel?: string;
 		/** Adds a disabled leading option with value "" (a form's "choose one"). */
@@ -24,7 +27,10 @@
 		error?: string;
 	} = $props();
 
-	const nodes = $derived(orgs.tree(root));
+	const nodes = $derived.by(() => {
+		const hidden = exclude ? orgs.scope(exclude) : null;
+		return orgs.tree(root).filter((n) => !hidden?.has(n.org.orgCode));
+	});
 </script>
 
 <div>

@@ -191,6 +191,9 @@
 		color: var(--color-base-content);
 		border-color: transparent;
 	}
+	.panel .btn.btn-soft2 {
+		background: var(--color-base-100);
+	}
 	.btn.btn-danger {
 		background: var(--color-error);
 		border-color: var(--color-error);

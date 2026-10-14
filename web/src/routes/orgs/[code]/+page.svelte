@@ -10,6 +10,7 @@
 	import DeviceBadge from '#components/DeviceBadge.svelte';
 	import Dialog from '#components/Dialog.svelte';
 	import Field from '#components/Field.svelte';
+	import Icon from '#components/Icon.svelte';
 	import OrgSelect from '#components/OrgSelect.svelte';
 	import SearchPicker from '#components/SearchPicker.svelte';
 	import { orgs } from '#lib/orgs.svelte';
@@ -26,6 +27,8 @@
 
 	const isAdmin = $derived(session.user?.role === 'admin');
 	const title = $derived(detail?.org.orgName ?? '');
+	// A top-level org has no parent to pick and cannot be given one.
+	const topLevel = $derived(!!detail && !detail.org.parentCode);
 	const subOrgs = $derived(orgs.list.filter((o) => o.parentCode === code));
 	const members = $derived(detail?.members ?? []);
 	const visible = $derived.by(() => {
@@ -138,6 +141,7 @@
 			await load();
 		} catch (e) {
 			moveConfirm = false;
+			moveOpen = true;
 			moveError = e instanceof ApiError ? e.message : 'Could not reach the server.';
 		} finally {
 			moving = false;
@@ -193,8 +197,9 @@
 
 	<h2 class="muted mb-1 text-[15px]">Members</h2>
 	<div class="relative mb-2">
+		<span class="muted absolute top-1/2 left-3 -translate-y-1/2"><Icon name="search" size={20} /></span>
 		<label class="sr-only" for="mq">Search members</label>
-		<input id="mq" type="search" class="field" placeholder="Search name, email or user ID" autocomplete="off" bind:value={q} />
+		<input id="mq" type="search" class="field !pl-10" placeholder="Search name, email or user ID" autocomplete="off" bind:value={q} />
 	</div>
 	<ul>
 		{#each visible as u (u.userId)}
@@ -218,12 +223,14 @@
 	<form novalidate onsubmit={save}>
 		<div class="mt-4 flex flex-col gap-4">
 			<Field id="ename" label="Organization name" bind:value={editName} error={nameError} />
-			<OrgSelect id="eparent" label="Parent organization" bind:value={editParent} allLabel="No parent (top level)" />
+			{#if !topLevel}
+				<OrgSelect id="eparent" label="Parent organization" bind:value={editParent} placeholder="Choose a parent" exclude={code} />
+			{/if}
 		</div>
 		{#if editError}<p class="err" role="alert">{editError}</p>{/if}
 		<div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 			<button type="button" class="btn btn-soft2" onclick={() => (editOpen = false)}>Cancel</button>
-			<button type="submit" class="btn btn-primary" disabled={saving}>Save</button>
+			<button type="submit" class="btn btn-primary" disabled={saving || (!topLevel && !editParent)}>Save</button>
 		</div>
 	</form>
 </Dialog>
@@ -265,7 +272,7 @@
 	{#if moveError}<p class="err" role="alert">{moveError}</p>{/if}
 	<div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 		<button type="button" class="btn btn-soft2" onclick={() => (moveOpen = false)}>Cancel</button>
-		<button type="button" class="btn btn-primary" disabled={!chosen.length} onclick={() => (moveConfirm = true)}>Move {chosen.length || ''} {chosen.length === 1 ? 'user' : 'users'}</button>
+		<button type="button" class="btn btn-primary" disabled={!chosen.length} onclick={() => ((moveOpen = false), (moveConfirm = true))}>Move {chosen.length || ''} {chosen.length === 1 ? 'user' : 'users'}</button>
 	</div>
 </Dialog>
 
@@ -276,7 +283,7 @@
 		{/each}
 	</ul>
 	<div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-		<button type="button" class="btn btn-soft2" onclick={() => (moveConfirm = false)}>Cancel</button>
+		<button type="button" class="btn btn-soft2" onclick={() => ((moveConfirm = false), (moveOpen = true))}>Cancel</button>
 		<button type="button" class="btn btn-primary" disabled={moving} onclick={move}>Move to {title}</button>
 	</div>
 </Dialog>
