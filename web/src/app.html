@@ -8,7 +8,8 @@
 		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
 		<link rel="icon" href="/favicon.ico" sizes="48x48" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-		<meta name="theme-color" content="#ffffff" />
+		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0f131a" media="(prefers-color-scheme: dark)" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-title" content="knoxmgr" />
@@ -20,6 +21,10 @@
 				var t = localStorage.getItem('theme');
 				if (t === 'light' || t === 'dark') {
 					document.documentElement.dataset.theme = t === 'dark' ? 'fcdark' : 'fclight';
+					var c = t === 'dark' ? '#0f131a' : '#ffffff';
+					document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+						m.setAttribute('content', c);
+					});
 				}
 			} catch (e) {}
 		</script>

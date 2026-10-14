@@ -2,6 +2,7 @@
 	"name": "knoxmgr",
 	"short_name": "knoxmgr",
 	"description": "Manage a Samsung Knox Manage tenant",
+	"id": "/",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",
