@@ -215,7 +215,7 @@ configured mapping of AD groups. A local account with the same username always w
 signs in locally only and never falls through to AD. Usernames are case-insensitive and stored
 lower-case. If AD is configured but cannot be reached, sign-in fails with a
 distinct "AD unreachable" error rather than a generic bad-password error, and local accounts keep
-working.
+working. Local accounts can change their display name and password from the account menu; AD accounts are managed in the directory.
 
 The first admin is created on the browser setup page, which asks for a one-time code printed in the
 start-up log. `knoxmgr -create-admin <username>` creates one from the command line for recovery; see

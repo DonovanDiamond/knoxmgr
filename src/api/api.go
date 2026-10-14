@@ -126,6 +126,8 @@ func New(d Deps) *fiber.App {
 	a.Post("/refresh", sameOrigin, s.refresh)
 	a.Post("/logout", sameOrigin, s.logout)
 	a.Get("/me", Authenticate(d.Auth, d.Users), s.me)
+	a.Put("/me", Authenticate(d.Auth, d.Users), s.updateAccount)
+	a.Post("/me/password", sameOrigin, Authenticate(d.Auth, d.Users), s.changePassword)
 
 	knoxG := api.Group("/knox", Authenticate(d.Auth, d.Users), s.knoxConfigured)
 	s.knoxRoutes(knoxG)

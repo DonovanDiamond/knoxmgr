@@ -78,3 +78,13 @@ func (r *RefreshTokens) RevokeAllForUser(ctx context.Context, userID int64) erro
 	}
 	return nil
 }
+
+// RevokeAllForUserExcept revokes the user's tokens other than the one with keepHash.
+func (r *RefreshTokens) RevokeAllForUserExcept(ctx context.Context, userID int64, keepHash string) error {
+	if _, err := r.db.ExecContext(ctx, r.db.Rebind(
+		`UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL`),
+		now(), userID, keepHash); err != nil {
+		return fmt.Errorf("revoking other refresh tokens of user %d: %w", userID, err)
+	}
+	return nil
+}

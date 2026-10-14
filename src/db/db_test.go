@@ -329,6 +329,35 @@ func TestRefreshTokens(t *testing.T) {
 	}
 }
 
+func TestRevokeAllForUserExcept(t *testing.T) {
+	d := testDB(t)
+	ctx := context.Background()
+	users, repo := NewUsers(d), NewRefreshTokens(d)
+	u1, u2 := localUser("a", "admin", nil, nil), localUser("b", "admin", nil, nil)
+	for _, u := range []*User{u1, u2} {
+		if err := users.Create(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	for _, tk := range []struct {
+		uid  int64
+		hash string
+	}{{u1.ID, "keep"}, {u1.ID, "drop"}, {u2.ID, "other"}} {
+		if err := repo.Insert(ctx, tk.uid, tk.hash, at.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.RevokeAllForUserExcept(ctx, u1.ID, "keep"); err != nil {
+		t.Fatal(err)
+	}
+	for h, ok := range map[string]bool{"keep": true, "drop": false, "other": true} {
+		if _, err := repo.GetValid(ctx, h, at); (err == nil) != ok {
+			t.Fatalf("token %s valid=%v, want %v", h, err == nil, ok)
+		}
+	}
+}
+
 func TestAuditAndSettings(t *testing.T) {
 	d := testDB(t)
 	ctx := context.Background()

@@ -16,6 +16,7 @@
 	// App chrome: sticky header, desktop nav, side panel (md+), phone action bar + tab bar.
 	let { children }: { children: Snippet } = $props();
 
+	let menu = $state<HTMLDetailsElement>();
 	let name = $state('Knoxmgr');
 	let version = $state('');
 	onMount(async () => {
@@ -67,7 +68,7 @@
 			<Icon name={themeIcon[theme.choice]} size={22} />
 		</button>
 		{#if session.user}
-			<details class="dropdown dropdown-end">
+			<details class="dropdown dropdown-end" bind:this={menu}>
 				<summary class="btn btn-ghost !h-10 !min-h-10 px-2" aria-label="Account menu">
 					<span class="max-w-[8rem] truncate text-[15px]">{session.user.displayName}</span>
 				</summary>
@@ -76,7 +77,10 @@
 					<p class="muted text-[14px]">
 						{session.user.username} · {session.user.role === 'admin' ? 'Admin' : session.user.access === 'write' ? 'Read and write' : 'Read only'}
 					</p>
-					<button type="button" class="btn btn-soft2 mt-3 w-full" onclick={logout}>Sign out</button>
+					<div class="mt-3 flex flex-col">
+						<a href="/account" class="row-hover flex min-h-11 items-center" onclick={() => menu?.removeAttribute('open')}>Edit account</a>
+						<button type="button" class="row-hover flex min-h-11 items-center text-left" onclick={logout}>Sign out</button>
+					</div>
 				</div>
 			</details>
 		{/if}

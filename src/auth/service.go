@@ -165,6 +165,12 @@ func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
 	return s.refresh.RevokeAllForUser(ctx, userID)
 }
 
+// LogoutOthers revokes every refresh token of a user except the one for keepRawToken, so a
+// password change ends other sessions but not the caller's.
+func (s *Service) LogoutOthers(ctx context.Context, userID int64, keepRawToken string) error {
+	return s.refresh.RevokeAllForUserExcept(ctx, userID, hashToken(keepRawToken))
+}
+
 func (s *Service) newSession(ctx context.Context, u *db.User) (*Session, error) {
 	p := Principal{UserID: u.ID, Username: u.Username, Role: u.Role}
 	if u.OrgCode != nil {

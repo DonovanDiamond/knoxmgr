@@ -80,7 +80,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `Categories`, `CreateCategory`, `RenameCategory`, `DeleteCategory`, `SetAppCategory`, `categoryName` | `src/db/apps.go` | category CRUD (`System` reserved, 100-byte cap, unique names; delete cascades the mappings); `SetAppCategory` maps a package, nil clears, returns the previous id |
 | `Inventory` (method), `SetLastPull`, `SetLastReportRequest`, `parseOptTime` | `src/db/apps.go` | persisted pull / report-request times |
 | `User`, `Users` (`Create`, `GetByID`, `GetByUsername`, `Update`, `UpsertADUser`, `CountAdmins`, `List`, `Delete`) | `src/db/users.go` | app account repository; `Delete` nulls `invites.invited_by`; AD upsert never overwrites a local row (`ErrSourceConflict`) |
-| `RefreshTokens` (`Insert`, `GetValid`, `GetByHash`, `Revoke`, `RevokeAllForUser`) | `src/db/refresh_tokens.go` | hashed refresh token store; single-use revoke; `GetByHash` finds revoked tokens so replay can be detected |
+| `RefreshTokens` (`Insert`, `GetValid`, `GetByHash`, `Revoke`, `RevokeAllForUser`, `RevokeAllForUserExcept`) | `src/db/refresh_tokens.go` | hashed refresh token store; single-use revoke; `GetByHash` finds revoked tokens so replay can be detected; `RevokeAllForUserExcept` keeps one token hash (password change) |
 | `AuditEntry`, `Audit` (`Insert`, `InsertInvites`, `ListRecent`, `LatestInvites`), `insertAudit` | `src/db/audit.go` | append-only audit log; `LatestInvites(ctx, ids)` maps user id to its latest invite time (`MAX(invited_at)` from `invites`, batched at 500); `InsertInvites(ctx, e, userIDs)` writes the audit row and one `invites` row per id in one transaction; `insertAudit` works inside a transaction |
 | `Settings` (`Get`, `Set`) | `src/db/settings.go` | key/value settings; `Set` audits atomically |
 | `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`, `AppInventoryHours`, `AppReportDaily`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
@@ -112,6 +112,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | Block | File | Purpose |
 |---|---|---|
 | `Service`, `NewService`, `Login`, `loginAD`, `Refresh` (replay of a revoked token revokes all the user's tokens), `Logout`, `LogoutAll`, `Verify`, `newSession` | `src/auth/service.go` | login (local first, then AD), refresh rotation, session issue |
+| `LogoutOthers` | `src/auth/service.go` | revoke all of a user's refresh tokens except the caller's (after a password change) |
 | `Session`, `newOpaqueToken`, `hashToken` | `src/auth/service.go` | session result; random refresh token and its SHA-256 |
 | `Tokens`, `NewTokens`, `Issue`, `Verify`, `claims`, `ErrInvalidToken` | `src/auth/jwt.go` | Ed25519 JWT access tokens |
 | `LoadOrGenerateKeys` and PEM helpers | `src/auth/keys.go` | load or create the 0600 key pair |
@@ -195,6 +196,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `sameOrigin` | `src/api/api.go` | 403 on refresh/logout when `Origin` host differs from the request host; absent passes |
 | `Deps.TrustedProxies` | `src/api/api.go` | enables fiber proxy trust and IP validation for the client IP |
 | `login`, `refresh`, `logout`, `me` | `src/api/auth.go` | auth endpoints; `login` applies the rate limiter (429) |
+| `updateAccount`, `changePassword`, `selfLocal`, `errADManaged` | `src/api/account.go` | self-service `PUT /api/auth/me` (display name) and `POST /api/auth/me/password` (`sameOrigin`); AD accounts 403 `ad_managed`; wrong current password 403 `wrong_password` and counts against `LoginLimiter`; revokes other sessions; audits `account.update` / `account.password` (no secrets) |
+| `TestUpdateAccount`, `TestAccountADRejected`, `TestChangePassword`, `TestChangePasswordRevokesOtherSessions`, `TestChangePasswordRateLimited`, `TestChangePasswordAuditHasNoSecrets` | `src/api/account_test.go` | account endpoint tests |
 | `logLoginFailure` | `src/api/auth.go` | failed-login log: username if the account exists, else 12-hex `userHash` |
 | `respondSession`, `clearCookie`, cookie constants | `src/api/auth.go` | refresh cookie `knoxmgr_refresh` |
 | `authStatus`, `authError` | `src/api/auth.go` | auth error to 401/403/409/503/500 mapping |
@@ -250,6 +253,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 |---|---|---|
 | `ApiError`, `api`, `refresh` | `web/src/lib/api/client.ts` | fetch wrapper: bearer header, one shared refresh on 401, redirect to `/login` |
 | `login`, `logout`, `restore` | `web/src/lib/api/auth.ts` | auth calls; `restore` restores session from the refresh cookie |
+| `updateMe`, `changePassword` | `web/src/lib/api/account.ts` | `/api/auth/me` and `/api/auth/me/password` calls |
 | `session` | `web/src/lib/api/session.svelte.ts` | in-memory access token and current user (runes) |
 | `User`, `AuthResponse`, `Health`, `ApiErrorBody`, `Role` | `web/src/lib/api/types.ts` | API types; `Health` has `knoxConfigured`, `setupRequired` |
 | `verifySetupCode`, `createFirstAdmin` | `web/src/lib/api/setup.ts` | `/api/setup` calls; the second signs in |
@@ -269,7 +273,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `shell`, `usePanel` | `web/src/lib/shell.svelte.ts` | header title/back and per-page side panel / phone action bar |
 | orgs store | `web/src/lib/orgs.svelte.ts` | cached org tree for pickers and names |
 | `toast` | `web/src/lib/toast.svelte.ts` | transient messages |
-| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps for every role; shows `Version x` from health and `UpdateNotice` for admins), collapsing title (optional right-aligned `actions` snippet), toast host |
+| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps for every role; shows `Version x` from health and `UpdateNotice` for admins; account menu with Edit account and Sign out rows), collapsing title (optional right-aligned `actions` snippet), toast host |
 | `Dialog`, `ConfirmDelete`, `InviteResultDialog` | `web/src/lib/components/` | modals; purge asks for the typed user id |
 | `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
 | `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled |
@@ -290,6 +294,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | app detail | `web/src/routes/apps/[package]/+page.svelte` | one app: devices with it (avatar select, freshness, version, managed), write users uninstall from the selected devices behind a confirm dialog with per-device results; admins assign the category |
 | groups list | `web/src/routes/groups/+page.svelte` | group list (create for admins; delete lives on the group detail screen) |
 | group detail | `web/src/routes/groups/[id]/+page.svelte` | Members / Apps / Profiles counts summary; members with avatar select and "Remove from group (N)"; Add members; Delete group (admin) |
+| account page | `web/src/routes/account/+page.svelte` | edit own display name and change password (local accounts; AD accounts see a directory-managed notice); linked from the `Shell` account menu (Edit account, Sign out) |
 | admin page | `web/src/routes/admin/+page.svelte` | app accounts and audit log |
 | setup page | `web/src/routes/setup/+page.svelte` | first-run wizard: code (prefilled from the `#code=` fragment by the desktop app, then stripped with `history.replaceState`), admin, Knox (skippable), done |
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |

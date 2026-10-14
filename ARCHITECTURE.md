@@ -120,7 +120,8 @@ Version and update check
 - SPA: admins see `UpdateNotice` in the shell; dismissal is per version in localStorage `knoxmgr.dismissedUpdate`.
 
 Cross-site and headers
-- `POST /api/auth/refresh` and `/logout` pass `sameOrigin`: an `Origin` whose host differs from the request host -> 403; an absent `Origin` passes (SameSite=Strict covers the cookie).
+- `PUT /api/auth/me` and `POST /api/auth/me/password` let a local account edit its display name and change its password (AD accounts: 403 `ad_managed`); a password change checks the current one through `LoginLimiter` and revokes the other refresh sessions.
+- `POST /api/auth/refresh`, `/logout` and `/me/password` pass `sameOrigin`: an `Origin` whose host differs from the request host -> 403; an absent `Origin` passes (SameSite=Strict covers the cookie).
 - Every response gets `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`; `Strict-Transport-Security` (1 year) only when secure cookies are on. `/api` also gets `Cache-Control: no-store`.
 - `api.New` builds the `Content-Security-Policy` once: `script-src 'self'` plus a sha256 hash of each inline `<script>` in the embedded `index.html`; it is sent on `.html` responses only. `img-src` also allows `https://tile.openstreetmap.org` for the location map.
 
