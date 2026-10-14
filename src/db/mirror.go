@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -175,7 +176,7 @@ func insertUser(ctx context.Context, tx *sqlx.Tx, u MirrorUser, at string) error
 
 func recountGroups(ctx context.Context, tx *sqlx.Tx) error {
 	_, err := tx.ExecContext(ctx, `UPDATE knox_groups SET user_count =
-		(SELECT COUNT(*) FROM knox_group_members m WHERE m.group_id = knox_groups.group_id)`)
+		(SELECT COUNT(*) FROM knox_group_members m WHERE m.group_id = knox_groups.group_id AND substr(m.user_id, 1, 1) <> '_')`)
 	return err
 }
 
@@ -211,19 +212,36 @@ func (m *Mirror) SubOrgCodes(ctx context.Context, code string) ([]string, error)
 	return out, err
 }
 
-// systemUserID is Knox's built-in "Android Management User"; it is hidden from the
-// user list but stays readable by id (device owner links).
-const systemUserID = "_AManagement"
+// Org returns one mirrored org, or ErrNotFound.
+func (m *Mirror) Org(ctx context.Context, code string) (MirrorOrg, error) {
+	var o MirrorOrg
+	err := m.db.GetContext(ctx, &o, m.db.Rebind(`SELECT org_code, org_name, parent_code FROM knox_orgs WHERE org_code = ?`), code)
+	return o, notFound(err)
+}
+
+// Knox reserves user ids starting with "_" for built-in accounts (e.g. _AManagement). They are
+// mirrored but invisible: every user read excludes them. substr, not LIKE, as "_" is a wildcard.
+const visibleUser = `substr(u.user_id, 1, 1) <> '_'`
+
+// IsHiddenUser reports whether id names a built-in account that must look nonexistent.
+func IsHiddenUser(id string) bool { return strings.HasPrefix(id, "_") }
 
 func (m *Mirror) Users(ctx context.Context, orgs []string) ([]MirrorUser, error) {
 	out := []MirrorUser{}
-	err := m.selectScoped(ctx, &out, `SELECT `+mirrorUserCols+` FROM knox_users u WHERE u.user_id <> ?`, []any{systemUserID}, "u.org_code", "u.user_name, u.user_id", orgs)
+	err := m.selectScoped(ctx, &out, `SELECT `+mirrorUserCols+` FROM knox_users u WHERE `+visibleUser, nil, "u.org_code", "u.user_name, u.user_id", orgs)
+	return out, err
+}
+
+// OrgMembers returns the users whose own org is code (sub-orgs excluded).
+func (m *Mirror) OrgMembers(ctx context.Context, code string) ([]MirrorUser, error) {
+	out := []MirrorUser{}
+	err := m.db.SelectContext(ctx, &out, m.db.Rebind(`SELECT `+mirrorUserCols+` FROM knox_users u WHERE `+visibleUser+` AND u.org_code = ? ORDER BY u.user_name, u.user_id`), code)
 	return out, err
 }
 
 func (m *Mirror) User(ctx context.Context, id string) (MirrorUser, error) {
 	var u MirrorUser
-	err := m.db.GetContext(ctx, &u, m.db.Rebind(`SELECT `+mirrorUserCols+` FROM knox_users u WHERE u.user_id = ?`), id)
+	err := m.db.GetContext(ctx, &u, m.db.Rebind(`SELECT `+mirrorUserCols+` FROM knox_users u WHERE `+visibleUser+` AND u.user_id = ?`), id)
 	return u, notFound(err)
 }
 
@@ -243,7 +261,7 @@ func (m *Mirror) Group(ctx context.Context, id string) (MirrorGroup, error) {
 func (m *Mirror) GroupMembers(ctx context.Context, groupID string, orgs []string) ([]MirrorUser, error) {
 	out := []MirrorUser{}
 	err := m.selectScoped(ctx, &out, `SELECT `+mirrorUserCols+` FROM knox_users u
-		JOIN knox_group_members gm ON gm.user_id = u.user_id WHERE gm.group_id = ?`, []any{groupID}, "u.org_code", "u.user_name, u.user_id", orgs)
+		JOIN knox_group_members gm ON gm.user_id = u.user_id WHERE `+visibleUser+` AND gm.group_id = ?`, []any{groupID}, "u.org_code", "u.user_name, u.user_id", orgs)
 	return out, err
 }
 
@@ -316,6 +334,61 @@ func (m *Mirror) DeleteUser(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// UpsertOrg writes an org; a rename also refreshes the denormalised org_name of its users.
+func (m *Mirror) UpsertOrg(ctx context.Context, o MirrorOrg) error {
+	tx, err := m.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`INSERT INTO knox_orgs (org_code, org_name, parent_code, synced_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT (org_code) DO UPDATE SET org_name = excluded.org_name, parent_code = excluded.parent_code, synced_at = excluded.synced_at`),
+		o.OrgCode, o.OrgName, o.ParentCode, now()); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE knox_users SET org_name = ? WHERE org_code = ?`), o.OrgName, o.OrgCode); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m *Mirror) DeleteOrg(ctx context.Context, code string) error {
+	_, err := m.db.ExecContext(ctx, m.db.Rebind(`DELETE FROM knox_orgs WHERE org_code = ?`), code)
+	return err
+}
+
+// MoveUsers puts the users (and the org_code carried by their devices) into org code.
+func (m *Mirror) MoveUsers(ctx context.Context, code string, userIDs []string) error {
+	var name string
+	if err := m.db.GetContext(ctx, &name, m.db.Rebind(`SELECT org_name FROM knox_orgs WHERE org_code = ?`), code); err != nil {
+		return notFound(err)
+	}
+	tx, err := m.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for i := 0; i < len(userIDs); i += idBatch {
+		batch := userIDs[i:min(i+idBatch, len(userIDs))]
+		for _, st := range []struct {
+			query string
+			args  []any
+		}{
+			{`UPDATE knox_users SET org_code = ?, org_name = ? WHERE user_id IN (?)`, []any{code, name, batch}},
+			{`UPDATE knox_devices SET org_code = ? WHERE user_id IN (?)`, []any{code, batch}},
+		} {
+			q, a, err := sqlx.In(st.query, st.args...)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, tx.Rebind(q), a...); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
 // UpsertGroup writes name and type; user_count is left to the membership rows and the
 // app/profile counts to the sync, so an update never zeroes them (a new group starts at 0).
 func (m *Mirror) UpsertGroup(ctx context.Context, g MirrorGroup) error {
@@ -378,7 +451,7 @@ func (m *Mirror) changeMembers(ctx context.Context, groupID string, change func(
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, tx.Rebind(`UPDATE knox_groups SET user_count =
-		(SELECT COUNT(*) FROM knox_group_members m WHERE m.group_id = knox_groups.group_id) WHERE group_id = ?`), groupID); err != nil {
+		(SELECT COUNT(*) FROM knox_group_members m WHERE m.group_id = knox_groups.group_id AND substr(m.user_id, 1, 1) <> '_') WHERE group_id = ?`), groupID); err != nil {
 		return err
 	}
 	return tx.Commit()

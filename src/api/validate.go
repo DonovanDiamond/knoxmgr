@@ -13,11 +13,12 @@ const (
 	maxTextLen   = 100
 	maxBatchIDs  = 100
 	maxGroupName = 50
+	maxOrgName   = 256
 )
 
 var (
 	knoxIDRe   = regexp.MustCompile(`^[A-Za-z0-9_.@+:-]{1,50}$`)
-	orgCodeRe  = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,50}$`)
+	orgCodeRe  = regexp.MustCompile(`^[A-Za-z0-9_.:+-]{1,50}$`)
 	groupIDRe  = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 	appUserRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9_.@-]{0,63}$`)
 	errBadBody = fiber.NewError(fiber.StatusBadRequest, "body must be valid JSON")

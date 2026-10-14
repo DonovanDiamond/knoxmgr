@@ -28,3 +28,6 @@ export function accessOf(user: User | null, orgName: string): Access {
 export function displayName(u: { userName: string; firstName: string; lastName: string; userId: string }): string {
 	return u.userName || `${u.firstName} ${u.lastName}`.trim() || u.userId;
 }
+
+/** Hidden owners (userId starting "_") have no user page, so they render as plain text. */
+export const ownerLinkable = (userId: string) => !userId.startsWith('_');

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ownerLinkable } from '#lib/perms';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api/client';
 	import { listDevices, type Device } from '#lib/api/devices';
@@ -97,7 +98,11 @@
 					<span class="sub">Last connection: {when(d)}</span>
 				</a>
 				{#if d.userId}
-					<a href="/users/{encodeURIComponent(d.userId)}" class="link relative z-10">{d.userName || d.userId}</a>
+					{#if ownerLinkable(d.userId)}
+						<a href="/users/{encodeURIComponent(d.userId)}" class="link relative z-10">{d.userName || d.userId}</a>
+					{:else}
+						<span class="relative z-10">{d.userName || d.userId}</span>
+					{/if}
 				{/if}
 				<DeviceBadge freshness={d.freshness} />
 			</li>

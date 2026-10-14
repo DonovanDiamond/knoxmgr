@@ -33,6 +33,10 @@ type Knox interface {
 	UpdateUser(ctx context.Context, u knox.UserInput) error
 	PurgeUser(ctx context.Context, userID string) error
 	RequestEnrollment(ctx context.Context, userIDs []string) (knox.EnrollmentResult, error)
+	CreateOrg(ctx context.Context, code, name, parentCode string) error
+	UpdateOrg(ctx context.Context, code, name, parentCode string) error
+	DeleteOrg(ctx context.Context, code string) error
+	AddOrgMembers(ctx context.Context, code string, userIDs []string) error
 	SelectGroups(ctx context.Context, q knox.GroupQuery) (knox.GroupPage, error)
 	InsertGroup(ctx context.Context, name string, userIDs []string) (knox.Group, error)
 	DeleteGroup(ctx context.Context, groupID string) error

@@ -5,12 +5,20 @@ import type {
 	Group,
 	KnoxUser,
 	KnoxUserFields,
+	OrgDetail,
 	Organization
 } from './types';
 
 const seg = encodeURIComponent;
 
 export const listOrgs = () => api<{ orgs: Organization[] }>('/api/knox/orgs').then((r) => r.orgs);
+export const getOrg = (code: string) => api<OrgDetail>(`/api/knox/orgs/${seg(code)}`);
+export const createOrg = (o: Organization) => api<void>('/api/knox/orgs', json('POST', o));
+export const updateOrg = (code: string, f: { orgName: string; parentCode: string }) =>
+	api<void>(`/api/knox/orgs/${seg(code)}`, json('PUT', f));
+export const deleteOrg = (code: string) => api<void>(`/api/knox/orgs/${seg(code)}`, { method: 'DELETE' });
+export const moveUsersToOrg = (code: string, userIds: string[]) =>
+	api<void>(`/api/knox/orgs/${seg(code)}/members`, json('POST', { userIds }));
 
 export const listUsers = (q = '') =>
 	api<{ users: KnoxUser[]; total: number }>(`/api/knox/users${q ? `?q=${seg(q)}` : ''}`).then((r) => r.users);

@@ -74,6 +74,11 @@ export interface Organization {
 	parentCode: string;
 }
 
+export interface OrgDetail {
+	org: Organization;
+	members: KnoxUser[];
+}
+
 export interface Group {
 	groupId: string;
 	groupName: string;

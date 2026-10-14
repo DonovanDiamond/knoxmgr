@@ -69,7 +69,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `DeviceCacheEntry`, `DeviceCache`, `PutDeviceCache` | `src/db/device_cache.go` | read / upsert the last live Knox answer of a kind for a device (`ErrNotFound` when none); `ReplaceAll` also prunes rows of dropped devices |
 | `Mirror`, `NewMirror`, `Snapshot`, `MirrorOrg`, `MirrorUser`, `MirrorGroup`, `MirrorMember`, `MirrorDevice` | `src/db/mirror.go` | mirror repository and row types |
 | `ReplaceAll`, `recountGroups` | `src/db/mirror.go` | replace the whole mirror from a `Snapshot` in one transaction; group user counts recomputed; `MirrorGroup` carries `AppCount` / `ProfileCount`, stored as given by `ReplaceAll` |
-| `Orgs`, `SubOrgCodes`, `Users`, `User`, `Groups`, `Group`, `GroupMembers`, `UserGroups`, `Devices`, `Device`, `DevicesOfUsers`, `selectScoped` | `src/db/mirror.go` | reads; `orgs` arg nil = unrestricted, empty = nothing, else `org_code IN`; `SubOrgCodes` is a recursive query; `Users` hides the Knox system account `_AManagement` (`systemUserID`), `User` still returns it |
+| `Orgs`, `Org`, `OrgMembers`, `SubOrgCodes`, `Users`, `User`, `Groups`, `Group`, `GroupMembers`, `UserGroups`, `Devices`, `Device`, `DevicesOfUsers`, `selectScoped` | `src/db/mirror.go` | reads; `orgs` arg nil = unrestricted, empty = nothing, else `org_code IN`; `SubOrgCodes` is a recursive query; every user read (`Users`, `User`, `GroupMembers`, group `user_count`) hides ids starting with `_` (`visibleUser`, `IsHiddenUser`); `api.knoxUser` 404s them for the Knox-backed write paths; `Org` is one org or `ErrNotFound`, `OrgMembers` the users directly in an org (sub-orgs excluded) |
+| `UpsertOrg`, `DeleteOrg`, `MoveUsers` | `src/db/mirror.go` | org write-through patches; `UpsertOrg` also refreshes `org_name` on the org's users, `MoveUsers` sets `org_code`/`org_name` on users and `org_code` on their devices |
 | `UpsertUser`, `DeleteUser`, `UpsertGroup`, `DeleteGroup`, `AddMembers`, `RemoveMembers`, `changeMembers` | `src/db/mirror.go` | write-through patches after Knox accepted a change |
 | `SyncRun`, `SyncCounts`, `StartRun`, `FinishRun`, `RecentRuns`, `LastSuccess` | `src/db/mirror.go` | `sync_runs` history |
 | schema | `src/db/migrations/0010_app_inventory_fixes.sql` | adds `device_apps.mandatory`; deletes `knox_device_cache` rows of kind `apps`; seeds Messaging (tachyon, `com.Slack`), Productivity (Authenticator, Acrobat) and Entertainment (Shazam, Candy Crush) mappings |
@@ -141,6 +142,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `UserQuery`, `UserInput`, `SelectUsers`, `SelectUserWithID`, `CreateUser`, `UpdateUser`, `PurgeUser`, `RequestEnrollment`, `EnrollmentResult` | `src/knox/users.go` | user operations |
 | `GroupQuery.WithCounts` | `src/knox/groups.go` | sends `needDeviceUserCount=yes`; the sync fetches groups with it to get `assignAppCount` / `assignProfileCount` |
 | `GroupQuery`, `SelectGroups`, `InsertGroup`, `DeleteGroup`, `SelectGroupUsers`, `InsertGroupUnits`, `DeleteGroupUnits`, `groupUnits` | `src/knox/groups.go` | USER group operations and membership |
+| `CreateOrg`, `UpdateOrg`, `DeleteOrg`, `AddOrgMembers`, `orgMutation` | `src/knox/orgs.go` | org writes (`/org/create`, `update`, `delete`, `addMembers`); `orgMutation` posts and drops the cached org list; `AddOrgMembers` sends `userIds` as `['u1','u2']` |
 | `Probe`, `ProbeError`, `tokenStatusError`, `transportFailure` | `src/knox/probe.go` | connection test: token, then one org list; failures in words fit for an admin, no URLs or secrets |
 | `SelectOrgList`, `SelectOrg`, `SelectOrgUsers`, `Orgs`, `SubOrgCodes` | `src/knox/orgs.go` | `Orgs` is the exported cached (60s) org list, used by `GET /api/knox/orgs` and `SubOrgCodes`; `SubOrgCodes` is an org plus descendants |
 
@@ -179,7 +181,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `androidDevice`, `uninstallApp`, `syncInstalledAppList` | `src/knoxmock/handlers_device.go` | app commands: Android devices only; uninstall removes the app from the device's list (persisting), refuses system apps (`1901013`) and unknown packages; the report request only checks the device |
 | `deviceApps`, `locationHistory`, `locationDays` | `src/knoxmock/data.go` | generated apps (25-40 per enrolled Android device, about 12 system; `systemApp`/`isManaged` as `Y`/`N`; `com.google.android.apps.photos` is "Google Photos" on most devices and "Fotos" on some, to show alternate names) and location trail per device (30 days back) |
 | `selectGroups`, `insertGroup`, `deleteGroup`, `selectGroupUsers`, `insertGroupUnits`, `deleteGroupUnits`, `changeUnits` | `src/knoxmock/handlers_group.go` | group endpoints; with `needDeviceUserCount=yes` each group also carries `assignAppCount` / `assignProfileCount` (seeded 5/3 and 2/1, new groups 0) |
-| `orgSelectList`, `orgSelect`, `orgSelectUsers` | `src/knoxmock/handlers_org.go` | org endpoints |
+| `orgSelectList`, `orgSelect`, `orgSelectUsers`, `orgCreate`, `orgUpdate`, `orgDelete`, `orgAddMembers` | `src/knoxmock/handlers_org.go` | org endpoints, reads and writes |
 
 ## src/api
 
@@ -206,7 +208,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `knoxRoutes`, `knoxUser`, `knoxGroup`, `targetsInWriteScope` | `src/api/knox.go` | `/api/knox` routes; per-request `Scope`; scope-checked lookups |
 | `userFields`, `fieldsOf` | `src/api/knox.go` | editable user fields and validation |
 | `userView`, `viewsOf`, `listOrgs` | `src/api/knox.go` | user JSON with `devices`/`invitedAt`; `viewsOf` attaches them to a user slice with one mirror device query and one batched invite lookup; `GET /api/knox/orgs` from the mirror, filtered to scope |
-| `listUserGroups`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers` | `src/api/knox.go` | user handlers; reads from the mirror (`listUserGroups` is `GET /users/:id/groups`), scoped in SQL; create/update/purge patch the mirror after Knox succeeds; purge needs `confirmUserId` |
+| `mirrorOrg`, `orgFields`, `validateOrg`, `getOrg`, `createOrg`, `updateOrg`, `deleteOrg`, `addOrgMembers` | `src/api/orgs.go` | org handlers: `GET /orgs/:code` (scope-checked, with direct members), admin-only create / update / delete / move members; `validateOrg` needs a name (`maxOrgName`) and an existing parent that is not the org or its descendant; knox first, then mirror; audited `knox.org.*` |
+| `listUserGroups`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers` | `src/api/knox.go` | user handlers (`createUser` rejects ids starting with `_`); reads from the mirror (`listUserGroups` is `GET /users/:id/groups`), scoped in SQL; create/update/purge patch the mirror after Knox succeeds; purge needs `confirmUserId` |
 | `listGroups`, `getGroup`, `createGroup`, `deleteGroup`, `listMembers`, `addMembers`, `removeMembers`, `changeMembers` | `src/api/knox.go` | group handlers; groups visible to all, members filtered to scope in SQL; create/delete/membership changes patch the mirror after Knox succeeds; `listMembers` returns each member with `devices` |
 | `freshnessOf`, `deviceFreshness`, `isEnrolled`, `deviceView`, `deviceSummary`, `viewOfDevice`, `summarize`, `listDevices`, `getDevice`, `listUserDevices` | `src/api/devices.go` | freshness constants (24h stale, 7d old), enrolled statuses, device JSON and the three device handlers; read from the mirror; scope via the owner's org in SQL, out of scope 404 |
 | `liveOrCached`, `deviceInfo`, `detailPayload`, `detailResponse`, `detailOf`, `rfc3339`, `canViewLocation`, `deviceDetail`, `locationPoint`, `locationPayload`, `pointOf`, `locationDays`, `deviceLocation` | `src/api/device_live.go` | live device detail/location with cache fallback on `knox_unreachable`; location admin/write only (404 otherwise), validated `days`, audited `device.location.view` |
@@ -263,17 +266,17 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `knoxStatus` | `web/src/lib/health.svelte.ts` | whether Knox is connected; set from health, a 503 `knox_not_configured` and a saved Knox form |
 | `KnoxForm` | `web/src/lib/components/KnoxForm.svelte` | Knox connection form with Test and Save, shared by the setup wizard and the Knox settings page |
 | `KnoxOffline` | `web/src/lib/components/KnoxOffline.svelte` | "Knox is not connected" notice with a link for admins |
-| `Organization`, `KnoxUser`, `Group`, `AppUser`, and request types | `web/src/lib/api/types.ts` | API types; `KnoxUser.devices` |
+| `Organization`, `OrgDetail`, `KnoxUser`, `Group`, `AppUser`, and request types | `web/src/lib/api/types.ts` | API types; `KnoxUser.devices` |
 | `Device`, `Freshness`, `listDevices`, `getDevice`, `listUserDevices`, `DeviceDetail`, `DeviceLocation`, `GeoPoint`, `getDeviceDetail`, `getDeviceLocation` | `web/src/lib/api/devices.ts` | `/api/knox` device calls, incl. live detail/location |
 | `AppSummary`, `AppDevice`, `AppCategory`, `UninstallResult`, `DeviceAppRow`, `DeviceAppsResponse`, `listApps`, `getApp`, `uninstallApp`, `listAppCategories`, `createAppCategory`, `renameAppCategory`, `deleteAppCategory`, `setAppCategory`, `getDeviceApps`, `refreshDeviceApps`, `compareCategories` | `web/src/lib/api/apps.ts` | `/api/knox/apps*`, `/api/knox/app-categories`, `/api/knox/devices/:id/apps*` and the admin category calls |
-| `listOrgs`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers`, group calls | `web/src/lib/api/knox.ts` | `/api/knox` calls |
+| `listOrgs`, `getOrg`, `createOrg`, `updateOrg`, `deleteOrg`, `moveUsersToOrg`, `listUsers`, `getUser`, `createUser`, `updateUser`, `purgeUser`, `inviteUsers`, group calls | `web/src/lib/api/knox.ts` | `/api/knox` calls |
 | `listAppUsers`, `createAppUser`, `updateAppUser`, `deleteAppUser`, `listAudit` | `web/src/lib/api/admin.ts` | `/api/admin` calls |
 | `theme` | `web/src/lib/theme.svelte.ts` | system/light/dark cycle; `fclight`/`fcdark`; persisted in localStorage |
-| `accessOf`, `displayName` | `web/src/lib/perms.ts` | what the session user may write, with the reason when not |
+| `accessOf`, `displayName`, `ownerLinkable` | `web/src/lib/perms.ts` | what the session user may write, with the reason when not; `ownerLinkable` is false for hidden `_` owners, which render as plain text instead of a user link |
 | `shell`, `usePanel` | `web/src/lib/shell.svelte.ts` | header title/back and per-page side panel / phone action bar |
-| orgs store | `web/src/lib/orgs.svelte.ts` | cached org tree for pickers and names |
+| orgs store | `web/src/lib/orgs.svelte.ts` | cached org tree for pickers and names; `refresh()` reloads after an org change |
 | `toast` | `web/src/lib/toast.svelte.ts` | transient messages |
-| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps for every role; shows `Version x` from health and `UpdateNotice` for admins; account menu with Edit account and Sign out rows), collapsing title (optional right-aligned `actions` snippet), toast host |
+| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps and Orgs for every role; shows `Version x` from health and `UpdateNotice` for admins; account menu with Edit account and Sign out rows), collapsing title (optional right-aligned `actions` snippet), toast host |
 | `Dialog`, `ConfirmDelete`, `InviteResultDialog` | `web/src/lib/components/` | modals; purge asks for the typed user id |
 | `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
 | `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled |
@@ -286,6 +289,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | root | `web/src/routes/+page.ts` | redirect to `/users` |
 | login page | `web/src/routes/login/+page.svelte` | username/password form; special message for `ad_unreachable` |
 | users list | `web/src/routes/users/+page.svelte` | list, search, select, invite |
+| orgs list | `web/src/routes/orgs/+page.svelte` | org tree with search; admin creates an org in a dialog |
+| org detail | `web/src/routes/orgs/[code]/+page.svelte` | org members; admin renames/re-parents, deletes, moves users in (`SearchPicker`) |
 | new user | `web/src/routes/users/new/+page.svelte` | create user |
 | user detail | `web/src/routes/users/[id]/+page.svelte` | view, edit, invite, delete |
 | devices list | `web/src/routes/devices/+page.svelte` | device list, search, freshness badge per device |

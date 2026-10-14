@@ -125,7 +125,7 @@ Knox Manage stays the source of truth, but knoxmgr keeps a local mirror of Knox 
 memberships and devices. A sync runs every 15 minutes by default (a general setting) and an admin can
 run one at any time with **Sync now** under `/admin/settings/general`. Screens read from the mirror;
 every change is sent to Knox first. knoxmgr also stores its own application accounts, refresh tokens,
-settings and an audit log. It does not manage device groups or the organization tree.
+settings and an audit log. It does not manage device groups. Admins can create, rename, re-parent and delete organizations and move users between them from the Orgs tab.
 
 The group screen opens with Members, Apps and Profiles counts (apps and profiles as assigned in Knox at the last
 sync). Tap member avatars to select them and use **Remove from group (N)** to remove several at once. Admins
@@ -183,6 +183,7 @@ that org and all of its sub-orgs, never its parent or siblings.
 | View user groups | all, all members | all groups, members filtered to scope | same as read |
 | Add or remove members of a group | any user | no | in-scope users only |
 | Create or delete user groups | yes | no | no |
+| Create, edit, delete orgs; move users between orgs | yes | no | no |
 
 ### Worked examples
 

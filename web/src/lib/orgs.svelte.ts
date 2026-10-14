@@ -36,6 +36,12 @@ class Orgs {
 		this.pending = null;
 	}
 
+	/** Reloads after an org was created, edited or deleted. */
+	refresh(): Promise<void> {
+		this.reset();
+		return this.load();
+	}
+
 	name(code: string | null | undefined): string {
 		return this.list.find((o) => o.orgCode === code)?.orgName ?? code ?? '';
 	}

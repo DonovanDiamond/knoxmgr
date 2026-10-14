@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 )
 
 // SelectOrgList lists organizations (GET /org/selectList). An empty orgCode
@@ -85,4 +86,64 @@ func (c *Client) SubOrgCodes(ctx context.Context, orgCode string) ([]string, err
 		}
 	}
 	return out, nil
+}
+
+// CreateOrg creates an organization (POST /org/create). An empty parentCode is omitted.
+func (c *Client) CreateOrg(ctx context.Context, code, name, parentCode string) error {
+	if code == "" || name == "" {
+		return errors.New("knox: orgCode and orgName are required")
+	}
+	f := url.Values{"orgCode": {code}, "orgName": {name}}
+	set(f, "parentCode", parentCode)
+	return c.orgMutation(ctx, "/org/create", f)
+}
+
+// UpdateOrg renames and/or re-parents an organization (POST /org/update). Empty name or
+// parentCode are omitted, which leaves that field unchanged.
+func (c *Client) UpdateOrg(ctx context.Context, code, name, parentCode string) error {
+	if code == "" {
+		return errors.New("knox: orgCode is required")
+	}
+	f := url.Values{"orgCode": {code}}
+	set(f, "orgName", name)
+	set(f, "parentCode", parentCode)
+	return c.orgMutation(ctx, "/org/update", f)
+}
+
+// DeleteOrg deletes an organization (POST /org/delete).
+func (c *Client) DeleteOrg(ctx context.Context, code string) error {
+	if code == "" {
+		return errors.New("knox: orgCode is required")
+	}
+	return c.orgMutation(ctx, "/org/delete", url.Values{"orgCode": {code}})
+}
+
+// AddOrgMembers moves users into an organization (POST /org/addMembers). Unlike the group
+// endpoints, the spec writes this userIds list as ['u1','u2'].
+func (c *Client) AddOrgMembers(ctx context.Context, code string, userIDs []string) error {
+	if code == "" {
+		return errors.New("knox: orgCode is required")
+	}
+	if len(userIDs) == 0 {
+		return errors.New("knox: at least one id is required")
+	}
+	quoted := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		if id == "" || strings.ContainsAny(id, ";,'\"[]") {
+			return errors.New("knox: invalid id")
+		}
+		quoted[i] = "'" + id + "'"
+	}
+	return c.orgMutation(ctx, "/org/addMembers", url.Values{"orgCode": {code}, "userIds": {"[" + strings.Join(quoted, ",") + "]"}})
+}
+
+// orgMutation posts an org change and drops the cached org list on success.
+func (c *Client) orgMutation(ctx context.Context, path string, f url.Values) error {
+	if _, err := call[ignored](ctx, c, http.MethodPost, path, f); err != nil {
+		return err
+	}
+	c.orgMu.Lock()
+	c.orgsSet = false
+	c.orgMu.Unlock()
+	return nil
 }

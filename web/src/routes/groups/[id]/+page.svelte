@@ -10,6 +10,7 @@
 	import ConfirmDelete from '#components/ConfirmDelete.svelte';
 	import DeviceBadge from '#components/DeviceBadge.svelte';
 	import Dialog from '#components/Dialog.svelte';
+	import Icon from '#components/Icon.svelte';
 	import Note from '#components/Note.svelte';
 	import { orgs } from '#lib/orgs.svelte';
 	import { accessOf, displayName } from '#lib/perms';
@@ -24,6 +25,7 @@
 	let loading = $state(true);
 	let loadError = $state('');
 	let actionError = $state('');
+	let q = $state('');
 
 	let pickerOpen = $state(false);
 	let candidates = $state<KnoxUser[]>([]);
@@ -43,6 +45,16 @@
 	const access = $derived(accessOf(session.user, orgs.name(session.user?.orgCode)));
 	const scopeName = $derived(orgs.name(access.scopeOrg));
 	const title = $derived(group?.groupName ?? '');
+
+	const visible = $derived.by(() => {
+		const needle = q.trim().toLowerCase();
+		return members.filter((m) => !needle || `${displayName(m)} ${m.userId} ${m.email}`.toLowerCase().includes(needle));
+	});
+	// Bulk removal must never touch members the user can no longer see.
+	$effect(() => {
+		const shown = new Set(visible.map((m) => m.userId));
+		for (const sel of [...selected]) if (!shown.has(sel)) selected.delete(sel);
+	});
 
 	const pickList = $derived.by(() => {
 		const have = new Set(members.map((m) => m.userId));
@@ -153,7 +165,7 @@
 	usePanel(() => ({
 		head: selected.size
 			? { value: selected.size, label: 'selected' }
-			: { value: members.length, label: members.length === 1 ? 'member shown' : 'members shown' },
+			: { value: visible.length, label: visible.length === 1 ? 'member shown' : 'members shown' },
 		note: access.canWrite ? (selected.size ? '' : 'Tap an avatar to select members to remove.') : access.reason,
 		lock: !access.canWrite,
 		actions: selected.size
@@ -199,9 +211,14 @@
 		<p class="muted mb-2 text-[14px]">Apps and profiles assigned in Knox, as of last sync.</p>
 	{/if}
 
-	<p class="muted py-2 text-[15px]" aria-live="polite">{members.length} {members.length === 1 ? 'member' : 'members'} shown</p>
+	<div class="relative mb-2">
+		<span class="muted absolute top-1/2 left-3 -translate-y-1/2"><Icon name="search" size={20} /></span>
+		<label class="sr-only" for="mq">Search members</label>
+		<input id="mq" type="search" class="field !pl-10" placeholder="Search name, email or user ID" autocomplete="off" bind:value={q} />
+	</div>
+	<p class="muted py-2 text-[15px]" aria-live="polite">{visible.length} {visible.length === 1 ? 'member' : 'members'}{q.trim() ? ' match' : ' shown'}</p>
 	<ul>
-		{#each members as u (u.userId)}
+		{#each visible as u (u.userId)}
 			<li class="row row-hover">
 				<Avatar name={displayName(u)} seed={u.userId} selected={selected.has(u.userId)} onclick={access.canWrite ? () => toggle(u.userId) : undefined} />
 				<a href="/users/{encodeURIComponent(u.userId)}" class="rowmain">
@@ -219,8 +236,8 @@
 			</li>
 		{:else}
 			<li class="py-14 text-center">
-				<p class="text-[20px] font-semibold">No members yet</p>
-				<p class="muted mt-1">Add people so they get this group in Knox.</p>
+				<p class="text-[20px] font-semibold">{members.length ? 'Nobody matches that search' : 'No members yet'}</p>
+				<p class="muted mt-1">{members.length ? 'Check the spelling.' : 'Add people so they get this group in Knox.'}</p>
 			</li>
 		{/each}
 	</ul>

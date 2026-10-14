@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ownerLinkable } from '#lib/perms';
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api/client';
@@ -104,7 +105,7 @@
 		{#if device.userId}
 			<div class="min-w-0">
 				<dt class="muted text-[15px]">Enrolled user</dt>
-				<dd class="text-[18px] break-words"><a href="/users/{encodeURIComponent(device.userId)}" class="link">{device.userName || device.userId}</a></dd>
+				<dd class="text-[18px] break-words">{#if ownerLinkable(device.userId)}<a href="/users/{encodeURIComponent(device.userId)}" class="link">{device.userName || device.userId}</a>{:else}{device.userName || device.userId}{/if}</dd>
 			</div>
 		{/if}
 		<div class="min-w-0">

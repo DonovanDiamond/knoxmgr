@@ -76,6 +76,10 @@ func New(clientID, clientSecret string, log zerolog.Logger) *Server {
 	api.HandleFunc("GET /emm/oapi/org/selectList", s.orgSelectList)
 	api.HandleFunc("GET /emm/oapi/org/select", s.orgSelect)
 	api.HandleFunc("GET /emm/oapi/org/selectUsers", s.orgSelectUsers)
+	api.HandleFunc("POST /emm/oapi/org/create", s.orgCreate)
+	api.HandleFunc("POST /emm/oapi/org/update", s.orgUpdate)
+	api.HandleFunc("POST /emm/oapi/org/delete", s.orgDelete)
+	api.HandleFunc("POST /emm/oapi/org/addMembers", s.orgAddMembers)
 
 	s.mux = http.NewServeMux()
 	s.mux.HandleFunc("POST /emm/oauth/token", s.token)

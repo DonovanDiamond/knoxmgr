@@ -401,3 +401,37 @@ func TestNewGroupAssignCountsZero(t *testing.T) {
 		t.Errorf("new group counts = %v/%v, want 0/0", g["assignAppCount"], g["assignProfileCount"])
 	}
 }
+
+func TestOrgMutations(t *testing.T) {
+	e := newEnv(t)
+	const base = "/emm/oapi/org/"
+	steps := []struct {
+		name, path string
+		form       url.Values
+		wantCode   string
+	}{
+		{"create", "create", url.Values{"orgCode": {"NEW"}, "orgName": {"New"}, "parentCode": {"SALES"}}, "0"},
+		{"create duplicate", "create", url.Values{"orgCode": {"NEW"}, "orgName": {"New"}}, codeConflict},
+		{"create unknown parent", "create", url.Values{"orgCode": {"X"}, "orgName": {"X"}, "parentCode": {"nope"}}, codeNotFound},
+		{"update cycle", "update", url.Values{"orgCode": {"SALES"}, "parentCode": {"NEW"}}, codeBadParam},
+		{"update self parent", "update", url.Values{"orgCode": {"NEW"}, "parentCode": {"NEW"}}, codeBadParam},
+		{"update reparent", "update", url.Values{"orgCode": {"NEW"}, "orgName": {"Renamed"}, "parentCode": {"SUPPORT"}}, "0"},
+		{"delete with sub-orgs", "delete", url.Values{"orgCode": {"SALES"}}, codeConflict},
+		{"delete with users", "delete", url.Values{"orgCode": {"SUPPORT"}}, codeConflict},
+		{"addMembers unknown org", "addMembers", url.Values{"orgCode": {"nope"}, "userIds": {"['alice']"}}, codeNotFound},
+		{"addMembers unknown user", "addMembers", url.Values{"orgCode": {"NEW"}, "userIds": {"['alice','zed']"}}, codeNotFound},
+		{"addMembers", "addMembers", url.Values{"orgCode": {"NEW"}, "userIds": {"['alice','bob']"}}, "0"},
+		{"delete still has users", "delete", url.Values{"orgCode": {"NEW"}}, codeConflict},
+		{"move users back", "addMembers", url.Values{"orgCode": {"ROOT"}, "userIds": {"alice;bob"}}, "0"},
+		{"delete", "delete", url.Values{"orgCode": {"NEW"}}, "0"},
+		{"delete gone", "delete", url.Values{"orgCode": {"NEW"}}, codeNotFound},
+	}
+	for _, s := range steps {
+		if _, m := e.call("POST", base+s.path, s.form); m["resultCode"] != s.wantCode {
+			t.Fatalf("%s: %v, want resultCode %s", s.name, m, s.wantCode)
+		}
+	}
+	if got := orgCodes(e.value("GET", base+"selectList", url.Values{})); got != "ROOT,SALES,SALES_EMEA,SUPPORT" {
+		t.Fatalf("orgs after lifecycle: %s", got)
+	}
+}

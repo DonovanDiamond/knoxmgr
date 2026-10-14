@@ -90,7 +90,7 @@ the socket peer is used and the header is ignored.
 ### Mock Knox (`cmd/knoxmock`)
 
 A fake Knox Manage for development and tests, seeded with orgs `ROOT` > `SALES` > `SALES_EMEA` and
-`ROOT` > `SUPPORT`, six users and two groups. State is in memory.
+`ROOT` > `SUPPORT` (org create/update/delete/addMembers are supported), six users and two groups. State is in memory.
 
 ```
 go run ./cmd/knoxmock -client-id demo -client-secret demo      # listens on 127.0.0.1:9090
@@ -211,6 +211,7 @@ Audit actions: `setup.create_admin`, `user.create_admin_cli`, `settings.set`,
 `app_user.create`, `app_user.update`, `app_user.delete`;
 `knox.user.create`, `knox.user.update`, `knox.user.purge`, `knox.user.invite`;
 `knox.group.create`, `knox.group.delete`, `knox.group.add_members`, `knox.group.remove_members`;
+`knox.org.create`, `knox.org.update`, `knox.org.delete`, `knox.org.add_members` (previous org codes per user);
 `admin.sync.start`;
 `device.app.uninstall` (one per device), `device.apps.refresh`, `device.apps.report_request` (actor `system`, `sent=N failed=N`);
 `app.category.create`, `app.category.rename`, `app.category.delete`, `app.category.assign`.
@@ -321,8 +322,13 @@ string or body).
 | `POST /api/auth/logout` | revokes the refresh token if present, clears the cookie, 204 |
 | `GET /api/auth/me` | requires Bearer; current user from the DB (401 unknown user, 403 disabled) |
 | `GET /api/knox/orgs` | Bearer; org tree entries from the mirror filtered to the caller's scope; `{orgs}` |
+| `GET /api/knox/orgs/:code` | Bearer; `{org, members}` (users directly in the org, with `devices`); 404 if absent or out of scope |
+| `POST /api/knox/orgs` | admin; `{orgCode, orgName, parentCode}` (code `[A-Za-z0-9_.:+-]`, max 50; name max 256; parent must exist); 409 if the code exists; 201 |
+| `PUT /api/knox/orgs/:code` | admin; `{orgName, parentCode}`; a parent that is the org or its descendant is 400 |
+| `DELETE /api/knox/orgs/:code` | admin; 204 |
+| `POST /api/knox/orgs/:code/members` | admin; `{userIds}` (1-100), moves the users (and their devices' scope) into the org; hidden `_` ids are 404; 204 |
 | `GET /api/knox/users` | Bearer; optional `?q=` (user id contains, case-insensitive); read from the mirror, scoped in SQL by org; `{users, total}`; each user also carries `devices {enrolled, lastConnection, freshness}` (`freshness` is `none`, `fresh`, `stale` or `old`: 24h and 7d thresholds, 0 enrolled `none`, enrolled never connected `old`) and `invitedAt` (RFC 3339, only when invited); enrolled means Knox status `A`, `B`, `BS`, `BA` or `BL` |
-| `POST /api/knox/users` | write; create a Knox user (org must be in scope) |
+| `POST /api/knox/users` | write; create a Knox user (org must be in scope); ids starting with `_` are 400 |
 | `POST /api/knox/users/invite` | write; `{userIds}` (1-100, in scope), sends enrollment invitations |
 | `GET /api/knox/users/:id` | Bearer; from the mirror; 404 if absent, 403 if out of scope |
 | `GET /api/knox/users/:id/groups` | Bearer; `{groups, total}` the user belongs to, from the mirror; 404 if the user is absent or out of scope |
@@ -428,7 +434,9 @@ and last name and derives the display name from them until the display name is e
 | `/apps` | installed apps grouped by category with device counts, search, category filter, show-system toggle (every role, scoped) |
 | `/apps/[package]` | one app: its devices, select and uninstall (write), category assignment (admin) |
 | `/groups` | group list |
-| `/groups/[id]` | group members |
+| `/groups/[id]` | group members, with a search box over name, email and user id (selection is limited to the matches shown) |
+| `/orgs` | org tree with search; admins create orgs |
+| `/orgs/[code]` | org members; admins edit, delete and move users in |
 | `/setup` | first-run wizard: code, admin, Knox (skippable), done |
 | `/admin` | app accounts and audit log (admin only) |
 | `/admin/settings/knox` | Knox connection form with Test and Save (admin only) |

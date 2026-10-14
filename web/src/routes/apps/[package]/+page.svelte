@@ -19,7 +19,7 @@
 	import Dialog from '#components/Dialog.svelte';
 	import Note from '#components/Note.svelte';
 	import { orgs } from '#lib/orgs.svelte';
-	import { accessOf } from '#lib/perms';
+	import { accessOf, ownerLinkable } from '#lib/perms';
 	import { usePanel } from '#lib/shell.svelte';
 	import { toast } from '#lib/toast.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -197,7 +197,7 @@
 				<span class="rowmain">
 					<a href="/devices/{encodeURIComponent(d.deviceId)}" class="nm">{d.deviceModel || d.deviceId}</a>
 					<span class="sub">
-						{#if d.userId}<a href="/users/{encodeURIComponent(d.userId)}" class="link">{d.userName || d.userId}</a>{' · '}{/if}{d.platform} · v{d.version || '?'}
+						{#if d.userId}{#if ownerLinkable(d.userId)}<a href="/users/{encodeURIComponent(d.userId)}" class="link">{d.userName || d.userId}</a>{:else}{d.userName || d.userId}{/if}{' · '}{/if}{d.platform} · v{d.version || '?'}
 					</span>
 					<span class="sub">Last connection: {when(d)}</span>
 					{#if access.canWrite && why && !d.uninstallRequested}<span class="sub">{why}</span>{/if}

@@ -28,7 +28,7 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 | db | `src/db` | connection, dialect shim, migrations, all SQL (repositories, incl. `Mirror` and `Apps`) |
 | auth | `src/auth` | login, passwords, JWT, keys, refresh rotation and replay detection, AD directory, group mapping, role checks, org `Scope`, login rate limiter, first-run `SetupCode` |
 | sync | `src/sync` | `Scheduler`: Knox-to-mirror sync on a schedule and on demand, one run at a time; `Start` loop, `SyncNow`, `KnoxSaved`, `Reschedule`, `OnSynced` hook. `Inventory`: per-device app pulls and the daily report request |
-| knox | `src/knox` | typed Knox Manage client: OAuth token reuse, users, groups, orgs (cached tree), live device detail/location, device app list, app commands (uninstall, report request), `knox.Error`, `Probe` (connection test) |
+| knox | `src/knox` | typed Knox Manage client: OAuth token reuse, users, groups, orgs (cached tree, create/update/delete/add members), live device detail/location, device app list, app commands (uninstall, report request), `knox.Error`, `Probe` (connection test) |
 | knoxmock | `src/knoxmock` | in-memory fake Knox server (OAuth + the operations knoxmgr uses, incl. the app commands) |
 | update | `src/update` | `Checker`: asks GitHub for the newest release tag and compares it with the running version; in-memory `Status`, no downloads |
 | api | `src/api` | fiber app, handlers (auth, setup, Knox, admin, settings), setup gate, middleware, audit recording, error shape, web serving |
@@ -90,6 +90,10 @@ Error mapping (`api/auth.go` for auth, `errorHandler` in `api/api.go` for everyt
 - `knox.ErrUnreachable` (transport failure, Knox 5xx, token endpoint failure, or a 401 that persists after the token refresh retry) -> 502, code `knox_unreachable`
 - anything else -> 500 `internal error` (detail in log only)
 - fiber errors keep their status (400 validation, 429 rate limit, 409 last admin); body shape `{error, code?}`
+
+Orgs
+- Reads come from the mirror (`GET /orgs/:code` is scope-checked, 404 outside scope). Create, update, delete and move-members are admin-only: validate (parent exists, no cycle via `Mirror.SubOrgCodes`), call Knox (`orgMutation` drops the cached org list), then patch the mirror (`UpsertOrg`, `DeleteOrg`, `MoveUsers`) and audit `knox.org.*`.
+- Users whose id starts with `_` are Knox built-ins: every mirror user read hides them (`visibleUser`), `knoxUser` 404s them, `createUser` rejects such ids, and the SPA shows `_` device owners as plain text (`ownerLinkable`).
 
 Devices
 - `viewsOf` reads the page's devices with one `Mirror.DevicesOfUsers` query and batches `Audit.LatestInvites(ctx, ids)` (latest `invites.invited_at` per user id: `MAX ... GROUP BY user_id` over the indexed `invites` table, batched at 500 ids) for `listUsers`, `getUser` and `listMembers`. `summarize` groups enrolled devices (Knox status `A`, `B`, `BS`, `BA`, `BL`) per user into `devices {enrolled, lastConnection, freshness}`; `lastConnection` is the stalest enrolled device's and is absent if one never connected.

@@ -15,6 +15,11 @@ import (
 
 func (s *server) knoxRoutes(r fiber.Router) {
 	r.Get("/orgs", s.listOrgs)
+	r.Get("/orgs/:code", s.getOrg)
+	r.Post("/orgs", RequireAdmin(), s.createOrg)
+	r.Put("/orgs/:code", RequireAdmin(), s.updateOrg)
+	r.Delete("/orgs/:code", RequireAdmin(), s.deleteOrg)
+	r.Post("/orgs/:code/members", RequireAdmin(), s.addOrgMembers)
 	r.Get("/users", s.listUsers)
 	r.Post("/users/invite", RequireWrite(), s.inviteUsers)
 	r.Post("/users", RequireWrite(), s.createUser)
@@ -40,6 +45,9 @@ func (s *server) knoxRoutes(r fiber.Router) {
 
 // knoxUser looks a target up in Knox; a Knox refusal for a single-user lookup means it is absent.
 func (s *server) knoxUser(c fiber.Ctx, id string) (knox.User, error) {
+	if db.IsHiddenUser(id) {
+		return knox.User{}, errUserNotFound
+	}
 	u, err := s.Knox().SelectUserWithID(c.Context(), id)
 	var ke *knox.Error
 	if errors.As(err, &ke) {
@@ -267,6 +275,9 @@ func (s *server) createUser(c fiber.Ctx) error {
 	}
 	if err := checkPattern(knoxIDRe, "userId", req.UserID); err != nil {
 		return err
+	}
+	if db.IsHiddenUser(req.UserID) {
+		return badRequest("userId must not start with _")
 	}
 	if err := req.validate(true); err != nil {
 		return err

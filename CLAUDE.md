@@ -23,7 +23,8 @@ Tailwind v4 + daisyUI. Single binary, CGO_ENABLED=0, linux/amd64 + windows/amd64
 - **First run:** config.yaml is optional with sensible defaults. On first start the log prints a
   one-time setup code; the browser setup page asks for it, then creates the first admin and
   collects Knox settings. Goal: a colleague can run it, connect their own tenant, and it just works.
-- Scope: Knox **USER groups only** (no device groups, no org management UI). No group rename
+- Scope: Knox **USER groups only** (no device groups). Org management (create/update/delete,
+  move users into an org) is **admin-only**; users view orgs in their scope (decided 2026-10-14). No group rename
   endpoint exists in Knox.
 - Roles: `admin` (everything) and `user`. A `user` is bound to exactly ONE Knox organization
   (orgCode) with access `read` or `write`; access covers that org **and its sub-orgs**.

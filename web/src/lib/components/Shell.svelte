@@ -34,6 +34,7 @@
 		{ href: '/devices', label: 'Devices', icon: 'device' },
 		{ href: '/apps', label: 'Apps', icon: 'apps' },
 		{ href: '/groups', label: 'Groups', icon: 'groups' },
+		{ href: '/orgs', label: 'Orgs', icon: 'orgs' },
 		...(session.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin', icon: 'admin' as const }] : [])
 	]);
 	const current = (href: string) => (page.url.pathname + '/').startsWith(href + '/') || undefined;

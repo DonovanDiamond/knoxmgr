@@ -16,6 +16,8 @@ func mirrorSnapshot() Snapshot {
 			{UserID: "u2", UserName: "two", OrgCode: "a1"},
 			{UserID: "u3", UserName: "three", OrgCode: "b"},
 			{UserID: "_AManagement", UserName: "_AManagement", OrgCode: "a"},
+			{UserID: "_x", UserName: "x", OrgCode: "a"},
+			{UserID: "Ax", UserName: "Ax", OrgCode: "a", Enabled: true},
 		},
 		Groups:  []MirrorGroup{{GroupID: "g1", GroupName: "G1", GroupType: "USER", UserCount: 99, AppCount: 4, ProfileCount: 2}, {GroupID: "g2", GroupName: "G2"}},
 		Members: []MirrorMember{{"g1", "u1"}, {"g1", "u2"}, {"g1", "u3"}},
@@ -137,9 +139,9 @@ func TestMirrorScope(t *testing.T) {
 		groupMember []string
 		devices     []string
 	}{
-		{"unrestricted", nil, []string{"u1", "u3", "u2"}, []string{"u1", "u3", "u2"}, []string{"d1", "d2", "d3"}},
+		{"unrestricted", nil, []string{"Ax", "u1", "u3", "u2"}, []string{"u1", "u3", "u2"}, []string{"d1", "d2", "d3"}},
 		{"nothing", []string{}, []string{}, []string{}, []string{}},
-		{"a subtree", []string{"a", "a1"}, []string{"u1", "u2"}, []string{"u1", "u2"}, []string{"d1"}},
+		{"a subtree", []string{"a", "a1"}, []string{"Ax", "u1", "u2"}, []string{"u1", "u2"}, []string{"d1"}},
 		{"a1 only", []string{"a1"}, []string{"u2"}, []string{"u2"}, []string{"d1"}},
 		{"b", []string{"b"}, []string{"u3"}, []string{"u3"}, []string{"d2"}},
 	} {
@@ -158,8 +160,13 @@ func TestMirrorScope(t *testing.T) {
 			}
 		})
 	}
-	if u, err := m.User(ctx, "_AManagement"); err != nil || u.UserID != "_AManagement" {
-		t.Fatalf("system user must stay readable by id: %+v, %v", u, err)
+	for _, id := range []string{"_AManagement", "_x"} {
+		if _, err := m.User(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("hidden user %s must be not found, got %v", id, err)
+		}
+	}
+	if _, err := m.User(ctx, "Ax"); err != nil {
+		t.Fatalf("underscore must not act as a wildcard: %v", err)
 	}
 	d, err := m.Device(ctx, "d1")
 	if err != nil || d.OrgCode != "a1" {
@@ -276,5 +283,50 @@ func TestMirrorRuns(t *testing.T) {
 	}
 	if err := m.FinishRun(ctx, 9999, "ok", "", SyncCounts{}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestMirrorOrgWrites(t *testing.T) {
+	m, ctx := newMirror(t)
+
+	members, err := m.OrgMembers(ctx, "a")
+	if err != nil || !reflect.DeepEqual(userIDs(members), []string{"Ax", "u1"}) {
+		t.Fatalf("OrgMembers(a) = %v, %v (hidden and sub-org users must be absent)", userIDs(members), err)
+	}
+	if _, err := m.Org(ctx, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Org(nope) = %v", err)
+	}
+
+	if err := m.UpsertOrg(ctx, MirrorOrg{"c", "C", "root"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.UpsertOrg(ctx, MirrorOrg{"a", "A renamed", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if o, _ := m.Org(ctx, "a"); o.OrgName != "A renamed" || o.ParentCode != "b" {
+		t.Fatalf("org a = %+v", o)
+	}
+	if u, _ := m.User(ctx, "u1"); u.OrgName != "A renamed" {
+		t.Fatalf("rename did not reach users: %+v", u)
+	}
+
+	if err := m.MoveUsers(ctx, "c", []string{"u1", "u2"}); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := m.User(ctx, "u2"); u.OrgCode != "c" || u.OrgName != "C" {
+		t.Fatalf("u2 = %+v", u)
+	}
+	if d, _ := m.Device(ctx, "d1"); d.OrgCode != "c" {
+		t.Fatalf("device d1 org = %q", d.OrgCode)
+	}
+	if err := m.MoveUsers(ctx, "nope", []string{"u1"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("move into unknown org = %v", err)
+	}
+
+	if err := m.DeleteOrg(ctx, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Org(ctx, "c"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Org(c) after delete = %v", err)
 	}
 }
