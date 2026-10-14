@@ -15,6 +15,11 @@ import (
 var staticExt = map[string]bool{".js": true, ".css": true, ".map": true, ".png": true, ".jpg": true, ".svg": true,
 	".ico": true, ".webp": true, ".woff": true, ".woff2": true, ".json": true, ".webmanifest": true, ".txt": true}
 
+func init() {
+	// Not in Go's built-in table and absent from minimal containers' /etc/mime.types.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}
+
 // serveWeb serves the embedded UI. Unknown extension-less paths get index.html so the SPA router
 // can handle them; a missing /_app/ path or static-asset extension is a real 404. Other dotted
 // paths (e.g. /apps/com.facebook.katana) are SPA deep links.

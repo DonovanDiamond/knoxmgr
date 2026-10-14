@@ -227,6 +227,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `serveWeb` | `src/api/web.go` | embedded UI; SPA fallback to index.html unless under `/_app/` or a known static extension (404), cache headers, CSP on `.html` |
 | web tests | `src/api/web_test.go` | unknown `/api/*` paths return JSON 404; SPA fallback and static rules |
 | `contentSecurityPolicy`, `inlineScript` | `src/api/web.go` | CSP with a sha256 per inline script of `index.html`, computed at start-up |
+| service worker | `web/src/service-worker/index.ts` | PWA shell cache: build output and static assets only, network-first navigations, `/api/` never cached |
 | `TestSecurityHeaders` and others | `src/api/api_hardening_test.go` | headers, HSTS, CSP, trusted-proxy client IP, cross-origin refusal, Knox 4xx admin-only, failed-login log |
 
 ## Dockerfile

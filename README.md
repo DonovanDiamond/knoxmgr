@@ -148,6 +148,8 @@ updates at the next pull). Categories: `System` is automatic, `Other` is built-i
 Admin > Settings > **App categories** (some are pre-filled; unknown apps are `Other`). App icons are
 generated letters, not store images, so nothing is fetched from outside.
 
+knoxmgr is an installable PWA: use your browser's "Install" or "Add to Home screen". Only the app shell is cached; data is never available offline.
+
 ## Vocabulary
 
 - **Tenant** — one Knox Manage customer account, reached with one set of API credentials.

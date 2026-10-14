@@ -165,7 +165,8 @@ func newEnvWith(t *testing.T, tweak func(*Deps)) *env {
 	static := fstest.MapFS{
 		"index.html": {Data: []byte(`<html>spa<script>var a=1;</script><script src="/x.js"></script>` +
 			`<script type="module">start()</script></html>`)},
-		"_app/immutable/a.js": {Data: []byte("console.log(1)")},
+		"_app/immutable/a.js":  {Data: []byte("console.log(1)")},
+		"manifest.webmanifest": {Data: []byte(`{"name":"knoxmgr"}`)},
 	}
 	mock := httptest.NewServer(knoxmock.New("cid", "secret", zerolog.Nop()))
 	t.Cleanup(mock.Close)
@@ -446,6 +447,8 @@ func TestWebAndNotFound(t *testing.T) {
 		{"asset", "GET", "/_app/immutable/a.js", 200, "console.log"},
 		{"missing asset", "GET", "/_app/missing.js", 404, ""},
 		{"dotted spa deep link", "GET", "/apps/com.facebook.katana", 200, "spa"},
+		{"manifest", "GET", "/manifest.webmanifest", 200, `"knoxmgr"`},
+		{"missing service worker is not the SPA", "GET", "/service-worker.js", 404, ""},
 		{"missing css", "GET", "/missing.css", 404, ""},
 		{"missing upper-case png", "GET", "/logo.PNG", 404, ""},
 		{"missing under _app without ext-match", "GET", "/_app/x.y", 404, ""},
@@ -459,6 +462,9 @@ func TestWebAndNotFound(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != tt.status || !strings.Contains(string(body), tt.contains) {
 				t.Fatalf("status %d body %q", resp.StatusCode, body)
+			}
+			if tt.name == "manifest" && resp.Header.Get("Content-Type") != "application/manifest+json" {
+				t.Fatalf("content type %q", resp.Header.Get("Content-Type"))
 			}
 			if strings.HasPrefix(tt.path, "/api") && !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
 				t.Fatalf("content type %q", resp.Header.Get("Content-Type"))

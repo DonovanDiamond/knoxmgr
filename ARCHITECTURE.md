@@ -132,6 +132,7 @@ Cross-site and headers
 
 Web serving
 - Non-`/api` GET/HEAD -> embedded file; missing path -> `index.html` (so dotted SPA paths like `/apps/com.x.y` work) except under `/_app/` or with a known static-asset extension -> 404; other methods -> 405.
+- PWA: `web/static/manifest.webmanifest` plus icons (`icon.svg` is the source: "km" in Figtree 800, primary colour, outlined to paths, on a white superellipse; PNGs and `favicon.ico` are renders of it, the maskable one full-bleed). `web/src/service-worker/index.ts` precaches the hashed build output, static assets and `/index.html`, is network-first for navigations (cached `/index.html` only offline) and never touches `/api/`. It is served as `/service-worker.js` with `no-cache`; `.webmanifest` is registered as `application/manifest+json` in `web.go`.
 
 First-run setup
 1. Start-up finds no admin (`Users.CountAdmins` = 0), creates an `auth.SetupCode` and logs it (`first-run setup code`, field `setupCode`). It lives in memory only.
