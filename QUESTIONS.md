@@ -205,8 +205,7 @@ any path is rejected at startup.
 
 ## Which UI rendition was chosen?
 
-**03 "Field coordinator"**, chosen by the user. It is built in `web/`; the other renditions stay
-under `design/renditions/` for reference only.
+**03 "Field coordinator"**, chosen by the user. It is built in `web/`; the other renditions have been removed.
 
 ## How is a user's device state derived?
 

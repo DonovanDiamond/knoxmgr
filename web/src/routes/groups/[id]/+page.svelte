@@ -204,10 +204,10 @@
 		{#each members as u (u.userId)}
 			<li class="row row-hover">
 				<Avatar name={displayName(u)} seed={u.userId} selected={selected.has(u.userId)} onclick={access.canWrite ? () => toggle(u.userId) : undefined} />
-				<span class="rowmain">
+				<a href="/users/{encodeURIComponent(u.userId)}" class="rowmain">
 					<span class="nm">{displayName(u)}</span>
 					<span class="sub">{u.orgName || orgs.name(u.orgCode)}</span>
-				</span>
+				</a>
 				<DeviceBadge count={u.devices.enrolled} freshness={u.devices.freshness} />
 				<button
 					type="button"

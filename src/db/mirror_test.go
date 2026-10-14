@@ -15,6 +15,7 @@ func mirrorSnapshot() Snapshot {
 			{UserID: "u1", UserName: "one", OrgCode: "a", Enabled: true},
 			{UserID: "u2", UserName: "two", OrgCode: "a1"},
 			{UserID: "u3", UserName: "three", OrgCode: "b"},
+			{UserID: "_AManagement", UserName: "_AManagement", OrgCode: "a"},
 		},
 		Groups:  []MirrorGroup{{GroupID: "g1", GroupName: "G1", GroupType: "USER", UserCount: 99, AppCount: 4, ProfileCount: 2}, {GroupID: "g2", GroupName: "G2"}},
 		Members: []MirrorMember{{"g1", "u1"}, {"g1", "u2"}, {"g1", "u3"}},
@@ -156,6 +157,9 @@ func TestMirrorScope(t *testing.T) {
 				t.Errorf("Devices = %v, %v; want %v", deviceIDs(ds), err, tc.devices)
 			}
 		})
+	}
+	if u, err := m.User(ctx, "_AManagement"); err != nil || u.UserID != "_AManagement" {
+		t.Fatalf("system user must stay readable by id: %+v, %v", u, err)
 	}
 	d, err := m.Device(ctx, "d1")
 	if err != nil || d.OrgCode != "a1" {

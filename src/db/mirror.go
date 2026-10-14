@@ -211,9 +211,13 @@ func (m *Mirror) SubOrgCodes(ctx context.Context, code string) ([]string, error)
 	return out, err
 }
 
+// systemUserID is Knox's built-in "Android Management User"; it is hidden from the
+// user list but stays readable by id (device owner links).
+const systemUserID = "_AManagement"
+
 func (m *Mirror) Users(ctx context.Context, orgs []string) ([]MirrorUser, error) {
 	out := []MirrorUser{}
-	err := m.selectScoped(ctx, &out, `SELECT `+mirrorUserCols+` FROM knox_users u WHERE 1=1`, nil, "u.org_code", "u.user_name, u.user_id", orgs)
+	err := m.selectScoped(ctx, &out, `SELECT `+mirrorUserCols+` FROM knox_users u WHERE u.user_id <> ?`, []any{systemUserID}, "u.org_code", "u.user_name, u.user_id", orgs)
 	return out, err
 }
 

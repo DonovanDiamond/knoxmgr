@@ -96,7 +96,7 @@
 				disabled: !access.canWrite || !selected.size || inviting,
 				reason: access.canWrite ? 'Select at least one person first' : access.reason
 			},
-			{ label: 'Add user', kind: selected.size ? 'soft' : 'primary', lead: true, onclick: () => goto('/users/new'), disabled: !access.canWrite, reason: access.reason }
+			...(selected.size ? [] : [{ label: 'Add user', kind: 'primary' as const, lead: true, onclick: () => goto('/users/new'), disabled: !access.canWrite, reason: access.reason }])
 		]
 	}));
 </script>

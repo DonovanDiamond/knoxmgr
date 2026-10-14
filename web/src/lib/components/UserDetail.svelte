@@ -23,6 +23,12 @@
 	let user = $state<KnoxUser | null>(null);
 	let groups = $state<Group[]>([]);
 	let devices = $state<Device[]>([]);
+
+	// Enrolled devices first, then most recently connected; devices that never connected go last.
+	function sortDevices(list: Device[]): Device[] {
+		const t = (d: Device) => (d.lastConnection ? Date.parse(d.lastConnection) || 0 : 0);
+		return [...list].sort((x, y) => Number(y.enrolled) - Number(x.enrolled) || t(y) - t(x));
+	}
 	let loading = $state(true);
 	let loadError = $state('');
 	let actionError = $state('');
@@ -66,7 +72,7 @@
 		sideError = '';
 		const [g, d] = await Promise.allSettled([getUserGroups(id), listUserDevices(id)]);
 		if (g.status === 'fulfilled') groups = g.value;
-		if (d.status === 'fulfilled') devices = d.value.devices;
+		if (d.status === 'fulfilled') devices = sortDevices(d.value.devices);
 		const failed = [g, d].find((r) => r.status === 'rejected');
 		if (failed?.status === 'rejected')
 			sideError = failed.reason instanceof ApiError ? failed.reason.message : 'Could not reach the server.';
