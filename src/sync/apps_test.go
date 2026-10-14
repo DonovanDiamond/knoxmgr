@@ -1,9 +1,11 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,5 +133,21 @@ func TestAfterSyncManualPullsAll(t *testing.T) {
 	inv.AfterSync(ctx, "manual")
 	if st, _ = apps.Inventory(ctx); !st.LastPullAt.After(first) {
 		t.Fatalf("manual run did not pull: %v", st.LastPullAt)
+	}
+}
+
+func TestPullAllLogsCountsAndEmptySample(t *testing.T) {
+	inv, _, _, _ := newInventory(t)
+	var buf bytes.Buffer
+	inv.log = zerolog.New(&buf)
+	if err := inv.PullAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `"appRows":`) || !strings.Contains(out, `"devicesWithoutApps":`) {
+		t.Fatalf("summary line lacks counts: %s", out)
+	}
+	if n := strings.Count(out, "Knox returned no apps for device"); n > 1 {
+		t.Fatalf("empty-list warning logged %d times in one pull", n)
 	}
 }

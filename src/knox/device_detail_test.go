@@ -31,8 +31,8 @@ func TestDeviceDetailCalls(t *testing.T) {
 	if err != nil || d.IMEI != "123" || d.IsRooting != "N" || len(d.Profiles) != 1 || d.Created != "2024-12-03T22:30:01Z" || form.Get("deviceId") != "dev1" {
 		t.Fatalf("detail = %+v, %v, form %v", d, err, form)
 	}
-	apps, err := c.SelectDeviceAppList(ctx, "dev1")
-	if err != nil || len(apps) != 1 || apps[0].PackageName != "com.mail" {
+	apps, diag, err := c.SelectDeviceAppList(ctx, "dev1")
+	if err != nil || diag != nil || len(apps) != 1 || apps[0].PackageName != "com.mail" {
 		t.Fatalf("apps = %+v, %v", apps, err)
 	}
 	loc, err := c.SelectDeviceLocation(ctx, "dev1")
@@ -53,7 +53,7 @@ func TestDeviceDetailRejectsBadInput(t *testing.T) {
 	if _, err := c.SelectDeviceDetail(ctx, ""); err == nil {
 		t.Error("detail: empty id accepted")
 	}
-	if _, err := c.SelectDeviceAppList(ctx, ""); err == nil {
+	if _, _, err := c.SelectDeviceAppList(ctx, ""); err == nil {
 		t.Error("apps: empty id accepted")
 	}
 	if _, err := c.SelectDeviceLocation(ctx, ""); err == nil {

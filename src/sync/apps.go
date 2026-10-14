@@ -44,13 +44,20 @@ func NewInventory(m *db.Mirror, a *db.Apps, au *db.Audit, k func() *knox.Client,
 
 // PullDevice replaces one device's mirrored app list with Knox's current one.
 func (i *Inventory) PullDevice(ctx context.Context, deviceID string) error {
+	_, _, err := i.pullDevice(ctx, deviceID)
+	return err
+}
+
+// pullDevice is PullDevice, also returning how many rows were stored and the app-list
+// diagnostic when Knox sent no apps.
+func (i *Inventory) pullDevice(ctx context.Context, deviceID string) (int, *knox.AppListDiagnostic, error) {
 	k := i.knox()
 	if k == nil {
-		return ErrNotConfigured
+		return 0, nil, ErrNotConfigured
 	}
-	list, err := k.SelectDeviceAppList(ctx, deviceID)
+	list, diag, err := k.SelectDeviceAppList(ctx, deviceID)
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
 	rows := make([]db.DeviceAppRow, 0, len(list))
 	for _, a := range list {
@@ -62,7 +69,7 @@ func (i *Inventory) PullDevice(ctx context.Context, deviceID string) error {
 		}
 		rows = append(rows, r)
 	}
-	return i.apps.ReplaceDeviceApps(ctx, deviceID, rows, i.now())
+	return len(rows), diag, i.apps.ReplaceDeviceApps(ctx, deviceID, rows, i.now())
 }
 
 // enrolledDevices lists the mirrored devices whose status says they are enrolled.
@@ -125,10 +132,24 @@ func (i *Inventory) PullAll(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listing devices: %w", err)
 	}
+	var mu stdsync.Mutex
+	stored, empty, warned := 0, 0, false
 	ok, failed := forEach(ctx, devices, func(d db.MirrorDevice) error {
-		err := i.PullDevice(ctx, d.DeviceID)
+		n, diag, err := i.pullDevice(ctx, d.DeviceID)
 		if err != nil {
 			i.log.Warn().Err(err).Str("device", d.DeviceID).Msg("app inventory pull failed for device")
+			return err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		stored += n
+		if diag != nil {
+			empty++
+			if !warned { // one sample per pull is enough to see the payload shape
+				warned = true
+				i.log.Warn().Str("device", d.DeviceID).Str("resultValueType", diag.ResultType).Interface("keys", diag.Keys).
+					Str("total", diag.Total).Strs("otherAppKeys", diag.AppKeys).Msg("Knox returned no apps for device")
+			}
 		}
 		return err
 	})
@@ -138,7 +159,7 @@ func (i *Inventory) PullAll(ctx context.Context) error {
 	if err := i.apps.SetLastPull(ctx, i.now()); err != nil {
 		return err
 	}
-	i.log.Info().Int("devices", ok).Int("failed", failed).Msg("app inventory pulled")
+	i.log.Info().Int("devices", ok).Int("failed", failed).Int("appRows", stored).Int("devicesWithoutApps", empty).Msg("app inventory pulled")
 	return nil
 }
 

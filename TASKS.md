@@ -4,7 +4,7 @@
 - Answer → haiku-scout. Change → sonnet-coder. Never a coder for a question.
 - Verified / reported / missing are three different things. I never present the last two as the first.
 - Nobody waits. Over budget = one check, then kill, then re-read git state before re-dispatching.
-- Never re-run a suite that passed with no change since. Last tested: v0.12.0 — full go test -count=1 ./... + npm check + windows vet (Governor-run)
+- Never re-run a suite that passed with no change since. Last tested: v0.12.1 — full go test -count=1 ./... + windows vet (web unchanged since v0.12.0 check)
 ### Decisions 2026-10-12 (answered)
 - Docker via DOCKER ?= sudo docker (9b42cf0). Tag only: v0.1.0 tagged, no push/remote. HSTS host only. Postgres test: not now. Group list count: keep Knox total.
 - Badge colour = stalest enrolled device (>24h yellow, >7d red); 0 devices = grey 0 badge; display name derived from first+last but editable; coordinators see devices of in-scope users only.
@@ -72,4 +72,4 @@
     d. [x] Group view: clicking a member opens the user view. Lane 1 (web). Done (npm check 0/0 reported; Governor viewed users + user shots).
     e. [x] Header username menu: "Edit account" (own details/password) + hover indicator on menu buttons. Lane 2 (auth surface). Done: /account page + PUT /api/auth/me + POST /api/auth/me/password (AD accounts 403), menu row-hover. Governor viewed menu-hover + account shots; full go test -count=1 + npm check + windows vet pass.
     f. [x] Hide Knox user "_AManagement" (Android Management User) from the users list. Lane 1 (backend). Done: filter on knox_users.user_id in Mirror.Users (diff viewed); reported go test db+api ok. Not hidden from group member lists.
-    g. Apps show nowhere (device tab + Apps page). Bug, Lane 1 debug. Worker: not reproducible vs mock at HEAD (reported: 36 apps, 23 on device, upgrade path ok); no change. Governor verified deployed :8088 health = v0.11.0. Blocked on user: real tenant or mock? + container log lines "app inventory". Side weakness: PullAll sets last pull even when all devices failed (6h wait).
+    g. Apps show nowhere (device tab + Apps page). Bug, Lane 1 debug. Worker: not reproducible vs mock at HEAD (reported: 36 apps, 23 on device, upgrade path ok); no change. Governor verified deployed :8088 health = v0.11.0. Blocked on user: real tenant or mock? + container log lines "app inventory". Side weakness: PullAll sets last pull even when all devices failed (6h wait). 2026-10-14 user: deployed log "app inventory pulled devices=149 failed=0", still no apps; system toggle, Knox console, Refresh from device all show none. Governor checked client vs spec (devicelist/total, start/limit): match. → v0.12.1 diagnostic logging (Lane 1). v0.12.1 logging done (appRows, devicesWithoutApps, one warn with resultValue key names/types). Awaiting user logs.

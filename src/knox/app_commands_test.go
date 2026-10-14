@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,7 +57,7 @@ func TestSelectDeviceAppListPages(t *testing.T) {
 		}
 		ok(w, `{"devicelist":[`+strings.TrimSuffix(strings.Repeat(`{"packageName":"com.a","systemApp":"Y"},`, n), ",")+`],"total":"1005"}`)
 	}
-	apps, err := c.SelectDeviceAppList(context.Background(), "dev1")
+	apps, _, err := c.SelectDeviceAppList(context.Background(), "dev1")
 	if err != nil || len(apps) != 1005 || strings.Join(starts, ",") != "0,1000" || !apps[0].System() {
 		t.Fatalf("got %d apps, starts %v, err %v", len(apps), starts, err)
 	}
@@ -67,7 +68,7 @@ func TestSelectDeviceAppListPages(t *testing.T) {
 		starts = append(starts, v.Get("start"))
 		ok(w, `{"devicelist":[`+strings.TrimSuffix(strings.Repeat(`{"packageName":"com.a"},`, 1000), ",")+`]}`)
 	}
-	if _, err := c.SelectDeviceAppList(context.Background(), "dev1"); err != nil || len(starts) != maxAppPages {
+	if _, _, err := c.SelectDeviceAppList(context.Background(), "dev1"); err != nil || len(starts) != maxAppPages {
 		t.Fatalf("pages = %d (%s), err %v", len(starts), strconv.Itoa(maxAppPages), err)
 	}
 }
@@ -105,5 +106,29 @@ func TestAppCommands(t *testing.T) {
 	}
 	if path != "" {
 		t.Errorf("invalid input reached Knox: %s", path)
+	}
+}
+
+func TestSelectDeviceAppListDiagnostic(t *testing.T) {
+	tests := []struct {
+		name, value string
+		want        *AppListDiagnostic
+	}{
+		{"normal list", `{"devicelist":[{"packageName":"com.a"}],"total":"1"}`, nil},
+		{"alternate key", `{"devicelist":[],"appList":[{"packageName":"com.secret.name"}],"total":"0"}`,
+			&AppListDiagnostic{ResultType: "object", Keys: map[string]string{"devicelist": "array", "appList": "array", "total": "string"}, Total: "0", AppKeys: []string{"appList"}}},
+		{"no list numeric total", `{"total":3,"note":"x"}`,
+			&AppListDiagnostic{ResultType: "object", Keys: map[string]string{"total": "number", "note": "string"}, Total: "3"}},
+		{"not an object", `"nothing"`, &AppListDiagnostic{ResultType: "string", Keys: map[string]string{}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, c := newFake(t)
+			f.api = func(w http.ResponseWriter, r *http.Request, v url.Values) { ok(w, tt.value) }
+			_, got, err := c.SelectDeviceAppList(context.Background(), "dev1")
+			if err != nil || !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("diag = %+v, %v; want %+v", got, err, tt.want)
+			}
+		})
 	}
 }
