@@ -287,7 +287,8 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `DeviceBadge`, `Chip`, `Avatar`, `Icon` | `web/src/lib/components/` | small display components (`DeviceBadge` `count` optional: omitted shows freshness dot only) |
 | layout | `web/src/routes/+layout.svelte` | restore session on load, redirect to `/login`, wrap pages in `Shell` |
 | `ssr = false`, `prerender = false` | `web/src/routes/+layout.ts` | SPA mode |
-| home | `web/src/routes/+page.svelte` | landing page (logo, login and setup go to `/`): total devices in scope (`listDevices`) with the enrolled count, and enrolled devices not connected in over 24h (stale/old/never), stalest first |
+| home | `web/src/routes/+page.svelte` | landing page (logo, login and setup go to `/`): total devices in scope (`listDevices`) with the enrolled count, and enrolled devices not connected in over 24h (stale/old/never), stalest first; also `SyncCard` (admins), `DeviceHealth`, `NotEnrolled` (from `listUsers`) |
+| `DeviceHealth`, `SyncCard`, `NotEnrolled` | `web/src/lib/components/` | home sections: freshness bar of enrolled devices (24h / 1-7d / >7d / never); last sync run with OK/Failed and "Sync now", polls every 2s while running then calls `onfinished`; in-scope users with no enrolled device, last invited, "Send invite" for write/admin, capped at 10 with show all |
 | login page | `web/src/routes/login/+page.svelte` | username/password form; special message for `ad_unreachable` |
 | users list | `web/src/routes/users/+page.svelte` | list, search, select, invite |
 | orgs list | `web/src/routes/orgs/+page.svelte` | org tree with search; admin creates an org in a dialog |

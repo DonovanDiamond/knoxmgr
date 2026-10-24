@@ -2,20 +2,35 @@
 	import { ownerLinkable } from '#lib/perms';
 	import { ApiError } from '#lib/api/client';
 	import { listDevices, type Device } from '#lib/api/devices';
+	import { listUsers } from '#lib/api/knox';
+	import { session } from '#lib/api/session.svelte';
+	import type { KnoxUser } from '#lib/api/types';
+	import { accessOf } from '#lib/perms';
+	import { orgs } from '#lib/orgs.svelte';
+	import DeviceHealth from '#components/DeviceHealth.svelte';
+	import NotEnrolled from '#components/NotEnrolled.svelte';
+	import SyncCard from '#components/SyncCard.svelte';
 	import KnoxOffline from '#components/KnoxOffline.svelte';
 	import { knoxStatus } from '#lib/health.svelte';
 	import BigTitle from '#components/BigTitle.svelte';
 	import DeviceBadge from '#components/DeviceBadge.svelte';
 
 	let devices = $state<Device[]>([]);
+	let users = $state<KnoxUser[]>([]);
 	let loading = $state(true);
 	let loadError = $state('');
 
-	async function load() {
-		loading = true;
+	const isAdmin = $derived(session.user?.role === 'admin');
+	const canInvite = $derived(accessOf(session.user, orgs.name(session.user?.orgCode)).canWrite);
+
+	// quiet reloads keep the page (and the sync card's polling) mounted.
+	async function load(quiet = false) {
+		loading = !quiet;
 		loadError = '';
 		try {
-			devices = (await listDevices()).devices;
+			const [d, u] = await Promise.all([listDevices(), listUsers(), orgs.load()]);
+			devices = d.devices;
+			users = u;
 		} catch (e) {
 			loadError = e instanceof ApiError ? e.message : 'Could not reach the server.';
 		} finally {
@@ -47,13 +62,21 @@
 	<div class="py-14 text-center">
 		<p class="text-[20px] font-semibold">Could not load devices</p>
 		<p class="muted mt-1">{loadError}</p>
-		<button type="button" class="btn btn-primary mt-5" onclick={load}>Try again</button>
+		<button type="button" class="btn btn-primary mt-5" onclick={() => load()}>Try again</button>
 	</div>
 {:else}
 	<a href="/devices" class="panel mt-2 mb-6 block max-w-xs">
 		<p class="text-[40px] leading-none font-extrabold tracking-tight">{devices.length}</p>
 		<p class="muted mt-1">{devices.length === 1 ? 'device' : 'devices'} · {enrolled.length} enrolled</p>
 	</a>
+
+	{#if isAdmin}
+		<div class="mb-8"><SyncCard onfinished={() => load(true)} /></div>
+	{/if}
+
+	<div class="mb-8"><DeviceHealth devices={enrolled} /></div>
+
+	<div class="mb-8"><NotEnrolled {users} {canInvite} oninvited={() => load(true)} /></div>
 
 	<h2 class="text-[20px] font-bold">Not connected in over 24 hours</h2>
 	<ul class="mt-2">

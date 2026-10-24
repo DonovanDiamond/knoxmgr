@@ -4,7 +4,7 @@
 - Answer → haiku-scout. Change → sonnet-coder. Never a coder for a question.
 - Verified / reported / missing are three different things. I never present the last two as the first.
 - Nobody waits. Over budget = one check, then kill, then re-read git state before re-dispatching.
-- Never re-run a suite that passed with no change since. Last tested: v0.16.0 — npm check 0/0 + go build (Governor); go test unchanged since v0.15.2 except comment
+- Never re-run a suite that passed with no change since. Last tested: v0.17.0 — npm check 0/0 (Governor); web-only since v0.16.0
 ### Decisions 2026-10-12 (answered)
 - Docker via DOCKER ?= sudo docker (9b42cf0). Tag only: v0.1.0 tagged, no push/remote. HSTS host only. Postgres test: not now. Group list count: keep Knox total.
 - Badge colour = stalest enrolled device (>24h yellow, >7d red); 0 devices = grey 0 badge; display name derived from first+last but editable; coordinators see devices of in-scope users only.
@@ -91,4 +91,4 @@
 34. [x] (2026-10-24) Fix groups.go comment "profiles/apps" → profiles (user). Lane 1, folded into #35 worker. Done (diff checked).
 35. [x] (2026-10-24) User screen "Add to group": show an in-progress animation on the clicked group while adding (user). Lane 1 (UserDetail.svelte, SearchPicker.svelte). Done: SearchPicker busyKey/key/busyText, md spinner + "Adding to <group>…" + pulse; double-click guarded (reported). Governor viewed shot, ran npm check 0/0 + go build. CBR updated by Governor.
 36. [x] (2026-10-24) Home page (user): devices not connected in >24h + total device count; root currently redirects to /users. Lane 1 (web only; uses existing listDevices). Parallel with #35, disjoint files; Governor updates index files after. Done: +page.svelte (total + enrolled stat, >24h list), home icon, logo/login/setup → /. Governor viewed desktop+mobile shots; worker npm check 0/0 (reported).
-37. [ ] (2026-10-24) Home page additions (user picked ideas 1,2,3): (1) freshness breakdown bar (≤24h, 1–7d, >7d, never); (2) last sync status + time, "Sync now" for admins; (3) users with no enrolled device (last invited, re-invite for write users). Committed #34–36 as v0.16.0 first.
+37. [x] (2026-10-24) Home page additions (user picked ideas 1,2,3): (1) freshness breakdown bar (≤24h, 1–7d, >7d, never); (2) last sync status + time, "Sync now" for admins; (3) users with no enrolled device (last invited, re-invite for write users). Committed #34–36 as v0.16.0 first. Done: DeviceHealth, SyncCard, NotEnrolled components + home page. Governor viewed admin desktop + read mobile shots, ran npm check 0/0. Invite click + live sync run untested in browser (reported). CBR updated. Tagged v0.17.0 + pushed.
