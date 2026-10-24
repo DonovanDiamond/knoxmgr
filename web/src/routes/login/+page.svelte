@@ -19,7 +19,7 @@
 		busy = true;
 		try {
 			await login(username, password);
-			await goto('/users');
+			await goto('/');
 		} catch (err: unknown) {
 			if (err instanceof ApiError && err.code === 'ad_unreachable') directoryDown = true;
 			else error = err instanceof ApiError ? err.message : 'Could not reach the server.';

@@ -277,17 +277,17 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `shell`, `usePanel` | `web/src/lib/shell.svelte.ts` | header title/back and per-page side panel / phone action bar |
 | orgs store | `web/src/lib/orgs.svelte.ts` | cached org tree for pickers and names; `refresh()` reloads after an org change |
 | `toast` | `web/src/lib/toast.svelte.ts` | transient messages |
-| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav incl. Apps and Orgs for every role; shows `Version x` from health and `UpdateNotice` for admins; account menu with Edit account and Sign out rows), collapsing title (optional right-aligned `actions` snippet), toast host |
+| `Shell`, `BigTitle`, `Toast` | `web/src/lib/components/` | page frame (nav starts with Home, incl. Apps and Orgs for every role; shows `Version x` from health and `UpdateNotice` for admins; account menu with Edit account and Sign out rows), collapsing title (optional right-aligned `actions` snippet), toast host |
 | `Dialog`, `ConfirmDelete`, `InviteResultDialog` | `web/src/lib/components/` | modals; purge asks for the typed user id |
-| `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
-| `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled |
+| `UserDetail` | `web/src/lib/components/UserDetail.svelte` | user screen: details, groups (filter when >8, searchable add showing "Adding to <group>…" while Knox answers, one add at a time), devices; Edit/Invite/Delete in the BigTitle `actions` snippet |
+| `SearchPicker` | `web/src/lib/components/SearchPicker.svelte` | type-to-filter listbox: arrow keys, Enter picks, Escape clears; props items, label, onpick, placeholder, disabled; optional `busyKey` + `key` + `busyText` show one row as in progress (spinner, busy label, pulse, other rows dimmed) |
 | `UserEditor`, `Field`, `OrgSelect`, `Note` | `web/src/lib/components/` | user create/edit form and its parts |
 | `DeviceApps`, `DeviceLocation` | `web/src/lib/components/` | device screen sections: app list from the mirror (`getDeviceApps`) grouped by category with an `AppIcon`, system apps hidden by default, "as of" time and a stale note, Refresh (write) and a confirmed Uninstall per app; location (current fix, 1/7/30-day history on a bundled Leaflet map with OSM tiles, hidden when `showMap` is off or no points; coordinates table, OpenStreetMap links); location shows an "as of" note when cached |
 | `AppIcon` | `web/src/lib/components/AppIcon.svelte` | offline monogram tile (`sm`/`md`/`lg`); hue hashed from the package, so no icon requests |
 | `DeviceBadge`, `Chip`, `Avatar`, `Icon` | `web/src/lib/components/` | small display components (`DeviceBadge` `count` optional: omitted shows freshness dot only) |
 | layout | `web/src/routes/+layout.svelte` | restore session on load, redirect to `/login`, wrap pages in `Shell` |
 | `ssr = false`, `prerender = false` | `web/src/routes/+layout.ts` | SPA mode |
-| root | `web/src/routes/+page.ts` | redirect to `/users` |
+| home | `web/src/routes/+page.svelte` | landing page (logo, login and setup go to `/`): total devices in scope (`listDevices`) with the enrolled count, and enrolled devices not connected in over 24h (stale/old/never), stalest first |
 | login page | `web/src/routes/login/+page.svelte` | username/password form; special message for `ad_unreachable` |
 | users list | `web/src/routes/users/+page.svelte` | list, search, select, invite |
 | orgs list | `web/src/routes/orgs/+page.svelte` | org tree with search; admin creates an org in a dialog |

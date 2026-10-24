@@ -97,6 +97,6 @@
 		</KnoxForm>
 	{:else}
 		<p class="muted mb-5">Setup is complete. You are signed in as {username}.</p>
-		<button type="button" class="btn btn-primary w-full" onclick={() => goto('/users')}>Open Knoxmgr</button>
+		<button type="button" class="btn btn-primary w-full" onclick={() => goto('/')}>Open Knoxmgr</button>
 	{/if}
 </main>

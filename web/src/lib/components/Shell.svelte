@@ -30,6 +30,7 @@
 	});
 
 	const tabs = $derived<{ href: string; label: string; icon: IconName }[]>([
+		{ href: '/', label: 'Home', icon: 'home' },
 		{ href: '/users', label: 'Users', icon: 'users' },
 		{ href: '/devices', label: 'Devices', icon: 'device' },
 		{ href: '/apps', label: 'Apps', icon: 'apps' },
@@ -37,7 +38,9 @@
 		{ href: '/orgs', label: 'Orgs', icon: 'orgs' },
 		...(session.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin', icon: 'admin' as const }] : [])
 	]);
-	const current = (href: string) => (page.url.pathname + '/').startsWith(href + '/') || undefined;
+	// '/' prefixes every path, so Home only matches exactly.
+	const current = (href: string) =>
+		(href === '/' ? page.url.pathname === '/' : (page.url.pathname + '/').startsWith(href + '/')) || undefined;
 
 	const themeIcon: Record<string, IconName> = { system: 'monitor', light: 'sun', dark: 'moon' };
 	const themeNext = { system: 'light', light: 'dark', dark: 'system' } as const;
@@ -53,7 +56,7 @@
 
 <header class="hdr sticky top-0 z-30">
 	<div class="mx-auto flex h-full max-w-[1040px] items-center gap-3 px-4 md:px-8">
-		<a href="/users" class="text-primary text-[18px] font-extrabold tracking-tight">{name}</a>
+		<a href="/" class="text-primary text-[18px] font-extrabold tracking-tight">{name}</a>
 		<span class="hdr-title min-w-0 flex-1 md:hidden" aria-hidden="true">{shell.title}</span>
 		<nav class="ml-4 hidden flex-1 gap-1 md:flex" aria-label="Main">
 			{#each tabs as t (t.href)}

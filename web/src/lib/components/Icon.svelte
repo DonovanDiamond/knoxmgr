@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	export type IconName =
-		| 'sun' | 'moon' | 'monitor' | 'users' | 'groups' | 'admin' | 'lock' | 'info' | 'check' | 'chev' | 'search' | 'back' | 'device' | 'apps' | 'orgs';
+		| 'sun' | 'moon' | 'monitor' | 'users' | 'groups' | 'admin' | 'lock' | 'info' | 'check' | 'chev' | 'search' | 'back' | 'device' | 'apps' | 'orgs' | 'home';
 </script>
 
 <script lang="ts">
@@ -21,6 +21,7 @@
 		back: '<path d="M15 5l-7 7 7 7"/>',
 		device: '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>',
 		orgs: '<rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="2" y="16" width="6" height="5" rx="1.5"/><rect x="16" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M5 16v-4h14v4"/>',
+		home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10M10 20v-6h4v6"/>',
 		apps: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>'
 	};
 </script>

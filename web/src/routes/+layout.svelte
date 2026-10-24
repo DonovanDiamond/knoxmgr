@@ -36,9 +36,9 @@
 		}
 		const signedIn = !!session.user || (await restore());
 		const onLogin = page.url.pathname === '/login';
-		if (page.url.pathname === '/setup') await goto(signedIn ? '/users' : '/login');
+		if (page.url.pathname === '/setup') await goto(signedIn ? '/' : '/login');
 		else if (!signedIn && !onLogin) await goto('/login');
-		else if (signedIn && onLogin) await goto('/users');
+		else if (signedIn && onLogin) await goto('/');
 		ready = true;
 	});
 </script>

@@ -5,8 +5,20 @@
 		label,
 		onpick,
 		placeholder = 'Search',
-		disabled = false
-	}: { items: T[]; label: (item: T) => string; onpick: (item: T) => void; placeholder?: string; disabled?: boolean } = $props();
+		disabled = false,
+		busyKey = '',
+		key = label,
+		busyText = label
+	}: {
+		items: T[];
+		label: (item: T) => string;
+		onpick: (item: T) => void;
+		placeholder?: string;
+		disabled?: boolean;
+		busyKey?: string; // key of the row whose action is in flight; the other rows dim
+		key?: (item: T) => string;
+		busyText?: (item: T) => string;
+	} = $props();
 
 	const uid = $props.id();
 	let q = $state('');
@@ -57,10 +69,11 @@
 			id="{uid}-{i}"
 			role="option"
 			aria-selected={i === current}
-			class="row row-hover cursor-pointer {i === current ? 'bg-base-200' : ''}"
+			class="row row-hover cursor-pointer {i === current ? 'bg-base-200' : ''} {busyKey && (key(item) === busyKey ? 'relative' : 'opacity-40')}"
 			onclick={() => !disabled && onpick(item)}
 		>
-			<span class="rowmain"><span class="nm !text-[16px]">{label(item)}</span></span>
+			{#if busyKey && key(item) === busyKey}<span class="absolute inset-0 animate-pulse rounded-[inherit] bg-primary/20" aria-hidden="true"></span><span class="loading loading-spinner loading-md text-primary relative mr-3" role="status" aria-label="In progress"></span>{/if}
+			<span class="rowmain relative"><span class="nm !text-[16px]">{busyKey && key(item) === busyKey ? busyText(item) : label(item)}</span></span>
 		</li>
 	{:else}
 		<li class="muted py-8 text-center" role="presentation">No matches.</li>

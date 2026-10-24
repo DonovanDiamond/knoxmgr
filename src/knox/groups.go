@@ -11,7 +11,7 @@ import (
 
 const groupTypeUser = "USER"
 
-// applyProfile makes Knox push the group's profiles/apps itself when membership changes or the group goes.
+// applyProfile makes Knox push the group's profiles itself when membership changes or the group goes.
 const applyProfile = "1"
 
 // GroupQuery filters and pages /group/selectGroups; only USER groups are ever requested.

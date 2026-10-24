@@ -128,6 +128,7 @@
 	}
 
 	async function addTo(g: Group) {
+		if (adding) return;
 		adding = g.groupId;
 		pickerError = '';
 		try {
@@ -245,7 +246,7 @@
 		<div class="py-8 text-center"><span class="loading loading-spinner"></span></div>
 	{:else}
 		{#if pickList.length}
-			<div class="mt-3"><SearchPicker items={pickList} label={(g) => g.groupName} onpick={addTo} placeholder="Search groups" disabled={!!adding} /></div>
+			<div class="mt-3"><SearchPicker items={pickList} label={(g) => g.groupName} onpick={addTo} placeholder="Search groups" disabled={!!adding} key={(g) => g.groupId} busyKey={adding} busyText={(g) => `Adding to ${g.groupName}…`} /></div>
 		{:else}
 			<p class="muted py-8 text-center">Already in every group.</p>
 		{/if}
