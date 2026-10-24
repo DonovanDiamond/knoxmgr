@@ -246,11 +246,11 @@ func TestErrors(t *testing.T) {
 		{"group wrong type", "POST", "/emm/oapi/group/insertGroup", url.Values{"groupName": {"G"}, "groupType": {"DEVICE"}}, codeBadParam},
 		{"group no name", "POST", "/emm/oapi/group/insertGroup", url.Values{"groupType": {"USER"}}, codeBadParam},
 		{"group unknown member", "POST", "/emm/oapi/group/insertGroup", url.Values{"groupName": {"G"}, "groupType": {"USER"}, "userIds": {"zed"}}, codeNotFound},
-		{"delete no ids", "POST", "/emm/oapi/group/deleteGroup", url.Values{}, codeBadParam},
+		{"delete no ids", "POST", "/emm/oapi/group/deleteGroup", url.Values{"applyProfile": {"1"}}, codeBadParam},
 		{"group users unknown group", "POST", "/emm/oapi/group/selectGroupUsers", url.Values{"groupId": {"nope"}}, codeNotFound},
-		{"add unknown group", "POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {"nope"}, "userIds": {"bob"}}, codeNotFound},
-		{"add unknown user", "POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {"zed"}}, codeNotFound},
-		{"remove no users", "POST", "/emm/oapi/group/deleteGroupUnits", url.Values{"groupId": {GroupPilot}}, codeBadParam},
+		{"add unknown group", "POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {"nope"}, "userIds": {"bob"}, "applyProfile": {"1"}}, codeNotFound},
+		{"add unknown user", "POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {"zed"}, "applyProfile": {"1"}}, codeNotFound},
+		{"remove no users", "POST", "/emm/oapi/group/deleteGroupUnits", url.Values{"groupId": {GroupPilot}, "applyProfile": {"1"}}, codeBadParam},
 		{"org not found", "GET", "/emm/oapi/org/select", url.Values{"orgCode": {"NOPE"}}, codeNotFound},
 		{"org users not found", "GET", "/emm/oapi/org/selectUsers", url.Values{"orgCode": {"NOPE"}}, codeNotFound},
 		{"org list not found", "GET", "/emm/oapi/org/selectList", url.Values{"orgCode": {"NOPE"}}, codeNotFound},
@@ -287,7 +287,7 @@ func TestUserLifecycle(t *testing.T) {
 	}
 
 	// Purge removes the user from groups too.
-	e.value("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupField}, "userIds": {"gina"}})
+	e.value("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupField}, "userIds": {"gina"}, "applyProfile": {"1"}})
 	e.value("POST", "/emm/oapi/user/purgeUser", url.Values{"userId": {"gina"}})
 	if _, m := e.call("GET", "/emm/oapi/user/selectUserWithID", url.Values{"userId": {"gina"}}); m["resultCode"] != codeNotFound {
 		t.Fatalf("after purge: %v", m)
@@ -323,8 +323,8 @@ func TestGroupLifecycle(t *testing.T) {
 		want       string
 	}{
 		{"initial", "", nil, "alice,frank"},
-		{"add (idempotent)", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {id}, "userIds": {"alice;bob"}}, "alice,bob,frank"},
-		{"remove", "/emm/oapi/group/deleteGroupUnits", url.Values{"groupId": {id}, "userIds": {"alice;carol"}}, "bob,frank"},
+		{"add (idempotent)", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {id}, "userIds": {"alice;bob"}, "applyProfile": {"1"}}, "alice,bob,frank"},
+		{"remove", "/emm/oapi/group/deleteGroupUnits", url.Values{"groupId": {id}, "userIds": {"alice;carol"}, "applyProfile": {"1"}}, "bob,frank"},
 	}
 	for _, s := range steps {
 		if s.path != "" {
@@ -335,12 +335,12 @@ func TestGroupLifecycle(t *testing.T) {
 		}
 	}
 	// Atomic: an unknown user rejects the whole add.
-	e.call("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {id}, "userIds": {"carol;zed"}})
+	e.call("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {id}, "userIds": {"carol;zed"}, "applyProfile": {"1"}})
 	if got := members(); got != "bob,frank" {
 		t.Fatalf("not atomic: %s", got)
 	}
 
-	d := e.value("POST", "/emm/oapi/group/deleteGroup", url.Values{"groupIdString": {id + ";missing"}})["deleteGroupResp"].(map[string]any)
+	d := e.value("POST", "/emm/oapi/group/deleteGroup", url.Values{"groupIdString": {id + ";missing"}, "applyProfile": {"1"}})["deleteGroupResp"].(map[string]any)
 	if d["successCount"] != 1.0 || d["failCount"] != 1.0 || d["total"] != 2.0 || d["failGroupIds"].([]any)[0] != "missing" {
 		t.Fatalf("deleteGroupResp %v", d)
 	}
@@ -358,7 +358,7 @@ func TestConcurrent(t *testing.T) {
 			defer wg.Done()
 			id := "u" + string(rune('a'+i))
 			e.call("POST", "/emm/oapi/user/createUser", url.Values{"userId": {id}, "userName": {id}, "email": {id + "@x.org"}})
-			e.call("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {id}})
+			e.call("POST", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {id}, "applyProfile": {"1"}})
 			e.call("GET", "/emm/oapi/user/selectUsers", url.Values{})
 			e.call("POST", "/emm/oapi/user/purgeUser", url.Values{"userId": {id}})
 		}()
@@ -433,5 +433,41 @@ func TestOrgMutations(t *testing.T) {
 	}
 	if got := orgCodes(e.value("GET", base+"selectList", url.Values{})); got != "ROOT,SALES,SALES_EMEA,SUPPORT" {
 		t.Fatalf("orgs after lifecycle: %s", got)
+	}
+}
+
+func TestGroupApplyProfileRequired(t *testing.T) {
+	e := newEnv(t)
+	calls := []struct {
+		name, path string
+		form       url.Values
+	}{
+		{"insertGroupUnits", "/emm/oapi/group/insertGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {"alice"}}},
+		{"deleteGroupUnits", "/emm/oapi/group/deleteGroupUnits", url.Values{"groupId": {GroupPilot}, "userIds": {"alice"}}},
+		{"deleteGroup", "/emm/oapi/group/deleteGroup", url.Values{"groupIdString": {"nope"}}},
+	}
+	for _, c := range calls {
+		for _, tc := range []struct {
+			name  string
+			value []string
+			want  string
+		}{
+			{"missing", nil, codeBadParam},
+			{"zero", []string{"0"}, codeBadParam},
+			{"one", []string{"1"}, "0"},
+		} {
+			t.Run(c.name+" "+tc.name, func(t *testing.T) {
+				form := url.Values{}
+				for k, v := range c.form {
+					form[k] = v
+				}
+				if tc.value != nil {
+					form["applyProfile"] = tc.value
+				}
+				if _, m := e.call("POST", c.path, form); m["resultCode"] != tc.want {
+					t.Fatalf("resultCode %v, want %s", m["resultCode"], tc.want)
+				}
+			})
+		}
 	}
 }

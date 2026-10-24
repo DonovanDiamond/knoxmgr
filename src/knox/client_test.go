@@ -244,13 +244,13 @@ func TestFormEncoding(t *testing.T) {
 			_, err := c.InsertGroup(ctx, "Team A", []string{"u1", "u2"})
 			return err
 		}, "POST", "/group/insertGroup", url.Values{"groupName": {"Team A"}, "groupType": {"USER"}, "userIds": {"u1;u2"}}},
-		{"deleteGroup", func(c *Client) error { return c.DeleteGroup(ctx, "g1") }, "POST", "/group/deleteGroup", url.Values{"groupIdString": {"g1"}}},
+		{"deleteGroup", func(c *Client) error { return c.DeleteGroup(ctx, "g1") }, "POST", "/group/deleteGroup", url.Values{"groupIdString": {"g1"}, "applyProfile": {"1"}}},
 		{"selectGroupUsers", func(c *Client) error {
 			_, err := c.SelectGroupUsers(ctx, "g1", 0, 50)
 			return err
 		}, "POST", "/group/selectGroupUsers", url.Values{"groupId": {"g1"}, "start": {"0"}, "limit": {"50"}}},
-		{"insertGroupUnits", func(c *Client) error { return c.InsertGroupUnits(ctx, "g1", []string{"u1"}) }, "POST", "/group/insertGroupUnits", url.Values{"groupId": {"g1"}, "userIds": {"u1"}}},
-		{"deleteGroupUnits", func(c *Client) error { return c.DeleteGroupUnits(ctx, "g1", []string{"u1", "u2"}) }, "POST", "/group/deleteGroupUnits", url.Values{"groupId": {"g1"}, "userIds": {"u1;u2"}}},
+		{"insertGroupUnits", func(c *Client) error { return c.InsertGroupUnits(ctx, "g1", []string{"u1"}) }, "POST", "/group/insertGroupUnits", url.Values{"groupId": {"g1"}, "userIds": {"u1"}, "applyProfile": {"1"}}},
+		{"deleteGroupUnits", func(c *Client) error { return c.DeleteGroupUnits(ctx, "g1", []string{"u1", "u2"}) }, "POST", "/group/deleteGroupUnits", url.Values{"groupId": {"g1"}, "userIds": {"u1;u2"}, "applyProfile": {"1"}}},
 		{"org selectList", func(c *Client) error { _, err := c.SelectOrgList(ctx, "o1"); return err }, "GET", "/org/selectList", url.Values{"orgCode": {"o1"}}},
 		{"org select", func(c *Client) error { _, err := c.SelectOrg(ctx, "o1"); return err }, "GET", "/org/select", url.Values{"orgCode": {"o1"}}},
 		{"org selectUsers", func(c *Client) error { _, err := c.SelectOrgUsers(ctx, "o1"); return err }, "GET", "/org/selectUsers", url.Values{"orgCode": {"o1"}}},

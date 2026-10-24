@@ -11,6 +11,9 @@ import (
 
 const groupTypeUser = "USER"
 
+// applyProfile makes Knox push the group's profiles/apps itself when membership changes or the group goes.
+const applyProfile = "1"
+
 // GroupQuery filters and pages /group/selectGroups; only USER groups are ever requested.
 type GroupQuery struct {
 	GroupID    string
@@ -76,7 +79,7 @@ func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
 			FailMessages []string `json:"failMessages"`
 		} `json:"deleteGroupResp"`
 	}
-	r, err := call[result](ctx, c, http.MethodPost, "/group/deleteGroup", url.Values{"groupIdString": {ids}})
+	r, err := call[result](ctx, c, http.MethodPost, "/group/deleteGroup", url.Values{"groupIdString": {ids}, "applyProfile": {applyProfile}})
 	if err == nil && r.Resp.FailCount > 0 {
 		return &Error{Code: "deleteGroup", Message: strings.Join(r.Resp.FailMessages, "; ")}
 	}
@@ -118,6 +121,6 @@ func (c *Client) groupUnits(ctx context.Context, path, groupID string, userIDs [
 	if groupID == "" {
 		return errors.New("knox: groupId is required")
 	}
-	_, err = call[ignored](ctx, c, http.MethodPost, path, url.Values{"groupId": {groupID}, "userIds": {ids}})
+	_, err = call[ignored](ctx, c, http.MethodPost, path, url.Values{"groupId": {groupID}, "userIds": {ids}, "applyProfile": {applyProfile}})
 	return err
 }

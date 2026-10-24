@@ -4,12 +4,13 @@
 - Answer → haiku-scout. Change → sonnet-coder. Never a coder for a question.
 - Verified / reported / missing are three different things. I never present the last two as the first.
 - Nobody waits. Over budget = one check, then kill, then re-read git state before re-dispatching.
-- Never re-run a suite that passed with no change since. Last tested: v0.14.0 (8888fe9) — full go test -count=1 ./... + npm build+check + windows vet (Governor-run, clean worktree)
+- Never re-run a suite that passed with no change since. Last tested: v0.15.2 — go test -count=1 ./... + vet (Governor-run)
 ### Decisions 2026-10-12 (answered)
 - Docker via DOCKER ?= sudo docker (9b42cf0). Tag only: v0.1.0 tagged, no push/remote. HSTS host only. Postgres test: not now. Group list count: keep Knox total.
 - Badge colour = stalest enrolled device (>24h yellow, >7d red); 0 devices = grey 0 badge; display name derived from first+last but editable; coordinators see devices of in-scope users only.
 - Versioning (user, 2026-10-12): commit and tag as we go; stay on v0.X, never v1. v0.2.0 = settings/sync/polish (3a2bb2c).
 ### Governor log
+- 2026-10-24 — #33 redirect arrived after 2 coders already ran the first approach; orchestrator could not stop them; revert blocked by guard hook (correct). User approved discard and ran the checkout themselves.
 - 2026-10-13 — M13b orchestrator returned "PLACEHOLDER" while its 3 coders were still running; rejected, resumed it to finish (workers left running, not re-dispatched).
 - 2026-10-13 — region worker missed a second test enumerating regions (src/api); caught by M12, fixed in follow-up.
 - 2026-10-13 — M10 clean (6 coders, disjoint; orchestrator fixed a showMap reload bug in review).
@@ -86,3 +87,4 @@
     - User 2026-10-14: tag + push when 30 is done (pre-authorised). Next tag v0.14.0. DONE: polish 8888fe9 (Governor viewed p-org-detail, p-move-confirm; top-level rename fix: set() skips empty verified). Governor ran on 8888fe9 in a clean worktree: npm check 0/0, npm build, go vet linux+windows, full go test -count=1 all ok. Tagged v0.14.0 + pushed (personal-info scan clean).
 31. [x] (2026-10-14) PWA: installable (manifest, icons, minimal service worker, theme colour, iOS meta). Icon = "km" in the title's font, colour and weight on white, squircle shape. Lane 1 (web + embed/server headers if needed). Dispatched in parallel with orgs polish (disjoint files). Done: manifest, icon.svg (Figtree 800 #1f4fd1 on white superellipse) + PNGs/favicon, SvelteKit service worker (no /api, network-first nav), app.html meta, .webmanifest mime. Governor viewed icon on grey (squircle ok, pixels checked), headers.txt; ran npm check 0/0 + build, go vet linux+windows, go test -count=1 src/api ok; gofmt fix by worker. Install prompt not tested in a browser. Open: dark theme-color, manifest id. Tag+push after (v0.15.0, pre-authorised by same instruction — confirm scope "then do updates").
 32. [x] (2026-10-14) PWA: dark theme-color + manifest id (user). Lane 1 (web). Done: media-scoped metas #ffffff/#0f131a (= base-100, verified), theme toggle syncs them, manifest id "/". Governor ran npm check 0/0. Toggle runtime untested in a browser. Tagged v0.15.1 + pushed.
+33. [ ] (2026-10-24) BUG (user): adding a user to a group does not push profiles to that user's devices, so they never receive the group's profile. Lane 2 (src/knox + src/api + src/knoxmock + tests). Dispatched orchestrator. Redirected: spec has applyProfile=1 on insertGroupUnits/deleteGroupUnits/deleteGroup (= Knox UI "Push profiles"); src never sends it. Fix = send the flag, no separate push call. User: commit + tag once it passes (v0.15.2) and push. Done: applyProfile=1 on insertGroupUnits/deleteGroupUnits/deleteGroup; mock requires it; abandoned per-device push reverted by user. Governor ran gofmt, go vet, go test -count=1 ./... all ok; web unchanged. Tagged v0.15.2 + pushed.

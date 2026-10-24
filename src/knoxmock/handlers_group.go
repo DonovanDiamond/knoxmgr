@@ -67,8 +67,8 @@ func (s *Server) insertGroup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	ids := splitIDs(r.PostFormValue("groupIdString"))
-	if len(ids) == 0 {
-		fail(w, codeBadParam, "groupIdString is required")
+	if len(ids) == 0 || r.PostFormValue("applyProfile") != "1" {
+		fail(w, codeBadParam, "groupIdString is required and applyProfile must be 1")
 		return
 	}
 	failIDs, failMsgs := []string{}, []string{}
@@ -116,8 +116,8 @@ func (s *Server) deleteGroupUnits(w http.ResponseWriter, r *http.Request) { s.ch
 func (s *Server) changeUnits(w http.ResponseWriter, r *http.Request, add bool) {
 	_ = r.ParseForm()
 	ids := splitIDs(r.PostFormValue("userIds"))
-	if len(ids) == 0 {
-		fail(w, codeBadParam, "userIds is required")
+	if len(ids) == 0 || r.PostFormValue("applyProfile") != "1" {
+		fail(w, codeBadParam, "userIds is required and applyProfile must be 1")
 		return
 	}
 	s.mu.Lock()
