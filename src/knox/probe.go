@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/DonovanDiamond/knoxmgr/src/netproxy"
 )
 
 // tokenStatusError is the token endpoint answering with a non-200 status. It is an ErrUnreachable
@@ -26,6 +28,9 @@ func transportFailure(err error) string {
 	var invalid x509.CertificateInvalidError
 	var host x509.HostnameError
 	var ne net.Error
+	if msg, ok := netproxy.Describe(err); ok {
+		return msg
+	}
 	switch {
 	case errors.As(err, &dns):
 		return "DNS lookup failed"

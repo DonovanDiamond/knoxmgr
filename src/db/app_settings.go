@@ -18,6 +18,14 @@ type KnoxSettings struct {
 	AllowInsecureHTTP bool   `db:"allow_insecure_http"`
 }
 
+// ProxySettings is the outbound proxy; the password is ciphertext only.
+type ProxySettings struct {
+	URL            string `db:"url"`
+	Username       string `db:"username"`
+	PasswordCipher string `db:"password_cipher"`
+	Bypass         string `db:"bypass"`
+}
+
 type ADMapping struct {
 	Group   string `db:"group_dn" json:"group"`
 	Role    string `db:"role" json:"role"`
@@ -59,6 +67,18 @@ func getKnox(ctx context.Context, q sqlx.QueryerContext) (KnoxSettings, error) {
 		return k, fmt.Errorf("loading knox settings: %w", err)
 	}
 	return k, nil
+}
+
+func (r *AppSettings) GetProxy(ctx context.Context) (ProxySettings, error) {
+	return getProxy(ctx, r.db)
+}
+
+func getProxy(ctx context.Context, q sqlx.QueryerContext) (ProxySettings, error) {
+	var p ProxySettings
+	if err := sqlx.GetContext(ctx, q, &p, `SELECT url, username, password_cipher, bypass FROM proxy_settings WHERE id = 1`); err != nil {
+		return p, fmt.Errorf("loading proxy settings: %w", err)
+	}
+	return p, nil
 }
 
 func (r *AppSettings) GetAD(ctx context.Context) (ADSettings, error) {
@@ -128,6 +148,30 @@ func (r *AppSettings) SaveKnox(ctx context.Context, next KnoxSettings, secretCha
 		}
 		return auditJSON(knoxAudit{Region: prev.Region, BaseURL: prev.BaseURL, ClientID: prev.ClientID, TenantID: prev.TenantID, AllowInsecureHTTP: prev.AllowInsecureHTTP}),
 			auditJSON(knoxAudit{next.Region, next.BaseURL, next.ClientID, next.TenantID, changed(secretChanged), next.AllowInsecureHTTP}), nil
+	})
+}
+
+type proxyAudit struct {
+	URL      string `json:"url"`
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	Bypass   string `json:"bypass"`
+}
+
+// SaveProxy replaces the proxy settings and audits them; see SaveKnox for the secret rule.
+func (r *AppSettings) SaveProxy(ctx context.Context, next ProxySettings, secretChanged bool, actorID *int64, actor string) error {
+	return r.save(ctx, "settings.proxy", actorID, actor, func(tx *sqlx.Tx) (*string, *string, error) {
+		prev, err := getProxy(ctx, tx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := tx.ExecContext(ctx, tx.Rebind(`
+			UPDATE proxy_settings SET url = ?, username = ?, password_cipher = ?, bypass = ?, updated_at = ? WHERE id = 1`),
+			next.URL, next.Username, next.PasswordCipher, next.Bypass, now()); err != nil {
+			return nil, nil, fmt.Errorf("saving proxy settings: %w", err)
+		}
+		return auditJSON(proxyAudit{URL: prev.URL, Username: prev.Username, Bypass: prev.Bypass}),
+			auditJSON(proxyAudit{next.URL, next.Username, changed(secretChanged), next.Bypass}), nil
 	})
 }
 

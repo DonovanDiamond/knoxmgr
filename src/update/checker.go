@@ -52,14 +52,14 @@ type Checker struct {
 	status Status
 }
 
-// New returns a Checker. An empty base means the public GitHub API.
-func New(version, base string, enabled func() bool, log zerolog.Logger) *Checker {
+// New returns a Checker. An empty base means the public GitHub API; a nil rt means the default transport.
+func New(version, base string, enabled func() bool, rt http.RoundTripper, log zerolog.Logger) *Checker {
 	if base == "" {
 		base = DefaultAPI
 	}
 	cur, ok := parse(currentRe, version)
 	return &Checker{version: version, current: cur, isRel: ok, base: strings.TrimRight(base, "/"), enabled: enabled,
-		client: &http.Client{Timeout: requestTimeout}, log: log, delay: startDelay, wake: make(chan struct{}, 1)}
+		client: &http.Client{Timeout: requestTimeout, Transport: rt}, log: log, delay: startDelay, wake: make(chan struct{}, 1)}
 }
 
 // Status returns the last result.

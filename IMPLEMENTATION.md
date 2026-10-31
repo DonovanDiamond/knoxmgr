@@ -129,9 +129,15 @@ secrets, saves with an audit row, and applies the change live (no restart): it s
   `showMap` (default on; omitted on PUT keeps the stored value) controls the device location map.
   The toggle carries a privacy note: the viewer's browser loads tiles from OpenStreetMap.
 
+- **Network (proxy)**: `url` (empty, or `http`/`https` with a host, no credentials, path or query),
+  `username`, `password` (write-only; empty keeps it, `clearPassword` removes it; a password needs
+  a username), `bypass` (comma-separated `NO_PROXY` list, `.domain` = subdomains only, `localhost`
+  always bypassed). With no `url` the `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` environment applies.
+  Used by Knox (incl. Test connection) and update checks, not LDAP; applied live via `netproxy.Transport`.
+
 ### Secrets encryption
 
-The Knox client secret and AD bind password are sealed with AES-256-GCM (`src/secretbox`), a random
+The Knox client secret, AD bind password and proxy password are sealed with AES-256-GCM (`src/secretbox`), a random
 nonce per value, stored as base64(nonce||ciphertext) in the `*_cipher` columns. The 32-byte key is in
 `<dataDir>/secret.key`, created once (mode 0600, random) and never rotated by knoxmgr. Secrets are
 never returned by the API: views carry `secretSet` / `bindPasswordSet` booleans, and a save with an
@@ -207,7 +213,7 @@ get foreign keys on, WAL and a 5s busy timeout.
   `orgs`, `users`, `groups`, `memberships`, `devices` (zero on failure).
 
 Audit actions: `setup.create_admin`, `user.create_admin_cli`, `settings.set`,
-`settings.knox`, `settings.ad`, `settings.general` (previous/new value; secrets show only whether they changed);
+`settings.knox`, `settings.ad`, `settings.general`, `settings.proxy` (previous/new value; secrets show only whether they changed);
 `app_user.create`, `app_user.update`, `app_user.delete`;
 `knox.user.create`, `knox.user.update`, `knox.user.purge`, `knox.user.invite`;
 `knox.group.create`, `knox.group.delete`, `knox.group.add_members`, `knox.group.remove_members`;
@@ -359,6 +365,7 @@ string or body).
 | `GET`, `PUT /api/admin/settings/ad` | admin; view (`bindPasswordSet`) / save and apply live |
 | `POST /api/admin/settings/ad/test` | admin; `{username, password, settings?}` signs in against the given (else stored) settings; `{ok, displayName, groups, role, orgCode, access}` or `{ok:false, code, message}`; saves nothing |
 | `GET`, `PUT /api/admin/settings/general` | admin; `{installationName, syncIntervalMinutes, checkUpdates, showMap, appInventoryHours, appReportDaily}` |
+| `GET`, `PUT /api/admin/settings/proxy` | admin; `{url, username, passwordSet, bypass, source, effectiveUrl}` / PUT `{url, username, password, clearPassword, bypass}`; applied live |
 | `POST /api/admin/sync` | admin; starts a sync in the background, 202 `{id, alreadyRunning}`; 503 `knox_not_configured`; audited `admin.sync.start` |
 | `GET /api/admin/sync` | admin; `{running, runId?, runs}` with the last 10 runs (`id`, `trigger`, `startedAt`, `finishedAt`, `status`, `error`, `counts`) |
 | any other `/api/*` | 404 JSON |
@@ -442,6 +449,7 @@ and last name and derives the display name from them until the display name is e
 | `/admin/settings/knox` | Knox connection form with Test and Save (admin only) |
 | `/admin/settings/ad` | Active Directory settings, group mappings, test sign-in (admin only) |
 | `/admin/settings/general` | installation name, sync interval, app refresh interval and daily report toggle (admin only) |
+| `/admin/settings/network` | outbound proxy: URL, username, password, bypass list (admin only) |
 | `/admin/settings/apps` | app categories: add, rename, delete (admin only) |
 
 While Knox is not connected the Knox pages show a "Knox is not connected" notice (`KnoxOffline`)

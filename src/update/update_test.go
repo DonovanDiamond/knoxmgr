@@ -65,7 +65,7 @@ func fake(t *testing.T, h http.HandlerFunc) *httptest.Server {
 }
 
 func checker(version, base string, enabled bool) *Checker {
-	return New(version, base, func() bool { return enabled }, zerolog.Nop())
+	return New(version, base, func() bool { return enabled }, nil, zerolog.Nop())
 }
 
 func TestCheck(t *testing.T) {

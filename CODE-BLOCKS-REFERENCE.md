@@ -84,7 +84,18 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `RefreshTokens` (`Insert`, `GetValid`, `GetByHash`, `Revoke`, `RevokeAllForUser`, `RevokeAllForUserExcept`) | `src/db/refresh_tokens.go` | hashed refresh token store; single-use revoke; `GetByHash` finds revoked tokens so replay can be detected; `RevokeAllForUserExcept` keeps one token hash (password change) |
 | `AuditEntry`, `Audit` (`Insert`, `InsertInvites`, `ListRecent`, `LatestInvites`), `insertAudit` | `src/db/audit.go` | append-only audit log; `LatestInvites(ctx, ids)` maps user id to its latest invite time (`MAX(invited_at)` from `invites`, batched at 500); `InsertInvites(ctx, e, userIDs)` writes the audit row and one `invites` row per id in one transaction; `insertAudit` works inside a transaction |
 | `Settings` (`Get`, `Set`) | `src/db/settings.go` | key/value settings; `Set` audits atomically |
-| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `SaveKnox`, `SaveAD`, `SaveGeneral`), `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`, `AppInventoryHours`, `AppReportDaily`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general` audit row in the same transaction; secrets audited only as changed/unchanged |
+| schema | `src/db/migrations/0011_proxy_settings.sql` | singleton `proxy_settings` row (id 1: `url`, `username`, `password_cipher`, `bypass`, `updated_at`), seeded empty |
+| `AppSettings` (`GetKnox`, `GetAD`, `GetGeneral`, `GetProxy`, `SaveKnox`, `SaveAD`, `SaveGeneral`, `SaveProxy`), `ProxySettings`, `KnoxSettings`, `ADSettings`, `ADMapping`, `GeneralSettings` (incl. `CheckUpdates`, `ShowMap`, `AppInventoryHours`, `AppReportDaily`) | `src/db/app_settings.go` | admin-editable settings; every save writes its `settings.knox`/`settings.ad`/`settings.general`/`settings.proxy` audit row in the same transaction; secrets audited only as changed/unchanged |
+
+## src/netproxy
+
+| Block | File | Purpose |
+|---|---|---|
+| `Config`, `Validate` | `src/netproxy/netproxy.go` | proxy URL (http/https, host, no userinfo/path/query), bypass list (max 100 entries) validation; empty URL is valid |
+| `Build` | `src/netproxy/netproxy.go` | clone of `http.DefaultTransport` using the configured proxy (credentials added, `NO_PROXY` rules via `httpproxy`), or `ProxyFromEnvironment` when no URL |
+| `Transport`, `NewTransport`, `Set`, `RoundTrip` | `src/netproxy/netproxy.go` | concurrency-safe round tripper whose proxy config is swapped at run time |
+| `Source`, `Redact` | `src/netproxy/netproxy.go` | `setting` / `env` / `none` with a credential-free URL; strip userinfo for display and logs |
+| `Describe` | `src/netproxy/netproxy.go` | proxy-caused errors to admin text (unresolved, timed out, refused, 407, rejected tunnel) |
 
 ## src/secretbox
 
@@ -101,12 +112,14 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `applyKnox`, `applyAD`, `knoxConfig`, `adConfig` | `src/settings/manager.go` | swap the live Knox client / `auth.Service` directory; token URL derived from the base URL |
 | `KnoxView`, `GetKnox`, `SaveKnox`, `TestKnox`, `KnoxTestResult`, `resolveKnox` | `src/settings/manager.go` | Knox settings view (no secret), save-and-apply, connection test via `knox.Client.Probe` |
 | `ADView`, `GetAD`, `SaveAD`, `TestAD`, `ADTestSuccess`, `ADTestFailure`, `resolveAD` | `src/settings/manager.go` | AD settings view, save-and-apply, test sign-in with role result |
+| `Transport`, `knoxHTTP` | `src/settings/manager.go` | the shared live `*netproxy.Transport` (also given to `update.New`); `knoxHTTP` is the 30s client used by every Knox client, incl. `TestKnox` |
+| `ProxyView`, `GetProxy`, `SaveProxy`, `applyProxy`, `proxyView` | `src/settings/manager.go` | proxy view (`passwordSet`, `source`, `effectiveUrl`; no password), save-and-apply live; `applyProxy` falls back to the environment proxy if the stored password cannot be opened; `Load` applies it first |
 | `GetGeneral`, `SaveGeneral` | `src/settings/manager.go` | installation name and sync interval |
 | `CheckUpdates` | `src/settings/manager.go` | whether GitHub update checks are allowed (live general setting) |
 | `ShowMap` | `src/settings/manager.go` | whether the device location map is shown (live general setting; `GeneralInput.ShowMap` nil keeps the stored value) |
 | `AppInventoryHours`, `AppReportDaily` | `src/settings/manager.go` | live general settings read by `sync.Inventory` (hours 1-168; `GeneralInput.AppReportDaily` nil keeps the stored value) |
 | `SetHooks`, `onKnoxSaved`, `onGeneralSaved` | `src/settings/manager.go` | callbacks run after a successful `SaveKnox` / `SaveGeneral` (main wires the sync scheduler); must not block |
-| `KnoxInput`, `ADInput`, `ADMapping`, `GeneralInput`, `normalise`, `InvalidError`, `Region`, `Regions` | `src/settings/validate.go` | input validation (400 via `InvalidError`), preset Knox regions |
+| `KnoxInput`, `ADInput`, `ADMapping`, `GeneralInput`, `ProxyInput`, `normalise`, `InvalidError`, `Region`, `Regions` | `src/settings/validate.go` | input validation (400 via `InvalidError`), preset Knox regions |
 
 ## src/auth
 
@@ -143,7 +156,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `GroupQuery.WithCounts` | `src/knox/groups.go` | sends `needDeviceUserCount=yes`; the sync fetches groups with it to get `assignAppCount` / `assignProfileCount` |
 | `GroupQuery`, `SelectGroups`, `InsertGroup`, `DeleteGroup`, `SelectGroupUsers`, `InsertGroupUnits`, `DeleteGroupUnits`, `groupUnits` | `src/knox/groups.go` | USER group operations and membership; `InsertGroupUnits`, `DeleteGroupUnits` and `DeleteGroup` always send `applyProfile=1` so Knox pushes profiles itself |
 | `CreateOrg`, `UpdateOrg`, `DeleteOrg`, `AddOrgMembers`, `orgMutation` | `src/knox/orgs.go` | org writes (`/org/create`, `update`, `delete`, `addMembers`); `orgMutation` posts and drops the cached org list; `AddOrgMembers` sends `userIds` as `['u1','u2']` |
-| `Probe`, `ProbeError`, `tokenStatusError`, `transportFailure` | `src/knox/probe.go` | connection test: token, then one org list; failures in words fit for an admin, no URLs or secrets |
+| `Probe`, `ProbeError`, `tokenStatusError`, `transportFailure` | `src/knox/probe.go` | connection test: token, then one org list; failures in words fit for an admin, no URLs or secrets; proxy failures are worded by `netproxy.Describe` (e.g. "proxy refused connection") |
 | `SelectOrgList`, `SelectOrg`, `SelectOrgUsers`, `Orgs`, `SubOrgCodes` | `src/knox/orgs.go` | `Orgs` is the exported cached (60s) org list, used by `GET /api/knox/orgs` and `SubOrgCodes`; `SubOrgCodes` is an org plus descendants |
 
 ## src/sync
@@ -164,7 +177,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | Block | File | Purpose |
 |---|---|---|
 | `tagRe`, `currentRe`, `semver`, `parse`, `compare` | `src/update/semver.go` | strict `vX.Y.Z` release tags; running version may be a git-describe string (base counts) |
-| `Checker`, `New`, `Status`, `Wake`, `Start`, `run` | `src/update/checker.go` | in-memory result; loop 1 min after start then 24h; `Wake` checks soon on every wake while enabled |
+| `Checker`, `New(version, base, enabled, rt http.RoundTripper, log)`, `Status`, `Wake`, `Start`, `run` | `src/update/checker.go` | in-memory result; loop 1 min after start then 24h; `Wake` checks soon on every wake while enabled |
 | `Check`, `ErrDisabled`, `store` | `src/update/checker.go` | one check now; off -> `ErrDisabled`; non-release version is not queried |
 | `latestTag`, `get` | `src/update/checker.go` | `releases/latest`, `/tags` fallback; 10s timeout, 1 MiB cap, fixed error texts; URL built locally |
 
@@ -192,7 +205,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `errorHandler`, `errorBody` | `src/api/api.go` | JSON error shape; maps not found 404, duplicate/source conflict 409, `knox.Error` 502, `knox.ErrUnreachable` 502 `knox_unreachable`; 500 detail only logged |
 | `health`, `requestLog` | `src/api/api.go` | `{status, name, version, knoxConfigured, setupRequired}`, request logging |
 | `setupVerify`, `setupAdmin`, `checkSetupCode`, `fiberError`, `errSetupDone` | `src/api/setup.go` | `/api/setup` endpoints; `setupMu` makes check-and-create atomic; separate rate limiter |
-| `settingsRoutes`, `getKnoxSettings`, `putKnoxSettings`, `testKnoxSettings`, `getADSettings`, `putADSettings`, `testADSettings`, `getGeneralSettings`, `putGeneralSettings` | `src/api/settings.go` | `/api/admin/settings/*` (admin only) |
+| `settingsRoutes`, `getKnoxSettings`, `putKnoxSettings`, `testKnoxSettings`, `getADSettings`, `putADSettings`, `testADSettings`, `getGeneralSettings`, `putGeneralSettings`, `getProxySettings`, `putProxySettings` | `src/api/settings.go` | `/api/admin/settings/*` (admin only); `GET`/`PUT /proxy` |
 | `server.securityHeaders` | `src/api/api.go` | nosniff, frame, referrer, Permissions-Policy headers; HSTS when secure cookies |
 | `noStore` | `src/api/api.go` | `Cache-Control: no-store` on the `/api` group |
 | `sameOrigin` | `src/api/api.go` | 403 on refresh/logout when `Origin` host differs from the request host; absent passes |
@@ -261,7 +274,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | `session` | `web/src/lib/api/session.svelte.ts` | in-memory access token and current user (runes) |
 | `User`, `AuthResponse`, `Health`, `ApiErrorBody`, `Role` | `web/src/lib/api/types.ts` | API types; `Health` has `knoxConfigured`, `setupRequired` |
 | `verifySetupCode`, `createFirstAdmin` | `web/src/lib/api/setup.ts` | `/api/setup` calls; the second signs in |
-| `getKnoxSettings`, `saveKnoxSettings`, `testKnoxSettings`, `getAdSettings`, `saveAdSettings`, `testAdSignIn`, `getGeneralSettings`, `saveGeneralSettings`, `getUpdateStatus`, `checkForUpdates` | `web/src/lib/api/settings.ts` | `/api/admin/settings` calls; the last two call `/api/admin/update` and `/update/check` |
+| `getKnoxSettings`, `saveKnoxSettings`, `testKnoxSettings`, `getAdSettings`, `saveAdSettings`, `testAdSignIn`, `getGeneralSettings`, `saveGeneralSettings`, `getProxySettings`, `saveProxySettings`, `getUpdateStatus`, `checkForUpdates` | `web/src/lib/api/settings.ts` | `/api/admin/settings` calls; the last two call `/api/admin/update` and `/update/check` |
 | `UpdateStatus` | `web/src/lib/api/types.ts` | update view type; `Health.version`, `GeneralSettings.checkUpdates` |
 | `UpdateNotice` | `web/src/lib/components/UpdateNotice.svelte` | admin-only new-version banner; dismissed per version in localStorage `knoxmgr.dismissedUpdate` |
 | `knoxStatus` | `web/src/lib/health.svelte.ts` | whether Knox is connected; set from health, a 503 `knox_not_configured` and a saved Knox form |
@@ -307,6 +320,7 @@ Block -> file -> one line. Tests: `*_test.go` beside each package. See
 | Knox settings | `web/src/routes/admin/settings/knox/+page.svelte` | Knox connection settings (uses `KnoxForm`) |
 | AD settings | `web/src/routes/admin/settings/ad/+page.svelte` | AD settings, group mappings, test sign-in |
 | general settings | `web/src/routes/admin/settings/general/+page.svelte` | installation name, sync interval, update-check toggle with status and "Check now", show-map toggle with privacy note, app refresh interval (1-168 h) and daily app-report toggle |
+| network settings | `web/src/routes/admin/settings/network/+page.svelte` | admin: proxy URL, username, write-only password (with clear), bypass list, shows the proxy in effect (setting, environment or direct); linked from the admin page |
 | app categories | `web/src/routes/admin/settings/apps/+page.svelte` | admin: add, rename and delete categories (delete asks to confirm; mappings go with it); linked from the admin page |
 | styles | `web/src/app.css` | Tailwind v4 + daisyUI themes `fclight`/`fcdark`, Figtree via @fontsource; `row-hover` for clickable rows |
 | `app.html`, `app.d.ts` | `web/src/` | SvelteKit template and ambient types |

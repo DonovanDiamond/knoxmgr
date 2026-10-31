@@ -13,6 +13,8 @@ func (s *server) settingsRoutes(r fiber.Router) {
 	r.Get("/ad", s.getADSettings)
 	r.Put("/ad", s.putADSettings)
 	r.Post("/ad/test", s.testADSettings)
+	r.Get("/proxy", s.getProxySettings)
+	r.Put("/proxy", s.putProxySettings)
 	r.Get("/general", s.getGeneralSettings)
 	r.Put("/general", s.putGeneralSettings)
 }
@@ -102,6 +104,26 @@ func (s *server) putGeneralSettings(c fiber.Ctx) error {
 		return err
 	}
 	v, err := s.Settings.SaveGeneral(c.Context(), in, principalFrom(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(v)
+}
+
+func (s *server) getProxySettings(c fiber.Ctx) error {
+	v, err := s.Settings.GetProxy(c.Context())
+	if err != nil {
+		return err
+	}
+	return c.JSON(v)
+}
+
+func (s *server) putProxySettings(c fiber.Ctx) error {
+	var in settings.ProxyInput
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	v, err := s.Settings.SaveProxy(c.Context(), in, principalFrom(c))
 	if err != nil {
 		return err
 	}

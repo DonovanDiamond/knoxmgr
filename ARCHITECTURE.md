@@ -23,8 +23,9 @@ See [README.md](README.md) (what), [IMPLEMENTATION.md](IMPLEMENTATION.md) (how),
 | server | `src/server` | shared start (`Options`, `Run`): config, db, migrate, wiring, serve; `-create-admin` |
 | knoxmock (cmd) | `cmd/knoxmock` | runs the fake Knox server |
 | config | `src/config` | optional `config.yaml` (defaults, validation, moved-key rejection), data dir, runtime `Knox`/`AD` structs, role/access constants, `Secret` |
+| netproxy | `src/netproxy` | outbound proxy: `Config` validation, `Build` a proxy-aware `http.Transport` (env fallback when no URL), swappable `Transport` round tripper, `Source`, `Redact`, `Describe` (admin-readable proxy errors) |
 | secretbox | `src/secretbox` | AES-GCM `Seal`/`Open` for stored secrets; `LoadOrCreate` the key file |
-| settings | `src/settings` | `Manager`: validate and save Knox/AD/general settings (incl. the app inventory interval and daily-report toggle), test connections, hold the live `knox.Client`, push AD changes into `auth.Service` |
+| settings | `src/settings` | `Manager`: validate and save Knox/AD/general/proxy settings (incl. the app inventory interval and daily-report toggle), test connections, hold the live `knox.Client`, push AD changes into `auth.Service` |
 | db | `src/db` | connection, dialect shim, migrations, all SQL (repositories, incl. `Mirror` and `Apps`) |
 | auth | `src/auth` | login, passwords, JWT, keys, refresh rotation and replay detection, AD directory, group mapping, role checks, org `Scope`, login rate limiter, first-run `SetupCode` |
 | sync | `src/sync` | `Scheduler`: Knox-to-mirror sync on a schedule and on demand, one run at a time; `Start` loop, `SyncNow`, `KnoxSaved`, `Reschedule`, `OnSynced` hook. `Inventory`: per-device app pulls and the daily report request |
@@ -51,7 +52,7 @@ cmd/knoxmock -> knoxmock   (knoxmock imports no other internal package)
 ```
 
 - `config` imports no internal package.
-- `db` imports no internal package. `auth` imports `config` and `db`. `knox` imports `config`. `secretbox` imports none. `settings` imports `auth`, `config`, `db`, `knox` and `secretbox`. `sync` imports `db` and `knox`. `update` imports no internal package (the enabled flag arrives as a func). `api` imports `auth`, `db`, `knox`, `settings` and `update`; it sees the scheduler only through the small `api.Syncer` interface (`SyncNow`, `Running`), so it does not import `sync`. `settings` does not import `sync` either: `main` passes it callbacks with `Manager.SetHooks` (run after `SaveKnox` and `SaveGeneral`, must not block).
+- `db` imports no internal package. `auth` imports `config` and `db`. `knox` imports `config` and `netproxy`. `secretbox` and `netproxy` import none. `settings` imports `auth`, `config`, `db`, `knox`, `netproxy` and `secretbox`; it owns the one live `netproxy.Transport` (`Manager.Transport()`), which backs every `knox.Client` it builds (incl. the test probe) and is handed to `update.New` as an `http.RoundTripper` (nil means the default transport). AD/LDAP does not use it. `sync` imports `db` and `knox`. `update` imports no internal package (the enabled flag arrives as a func). `api` imports `auth`, `db`, `knox`, `settings` and `update`; it sees the scheduler only through the small `api.Syncer` interface (`SyncNow`, `Running`), so it does not import `sync`. `settings` does not import `sync` either: `main` passes it callbacks with `Manager.SetHooks` (run after `SaveKnox` and `SaveGeneral`, must not block).
 - `api` sees the inventory only through the small `api.Inventory` interface (`PullDevice`, implemented by `*sync.Inventory`), like `Syncer`; `server` wires both.
 - `api` reaches Knox through the small `api.Knox` interface (implemented by `*knox.Client`), so tests can fake it. `Deps.Knox` is a `func() Knox` that returns nil while Knox is not configured, because the settings screens swap the client at run time; `main` adapts `settings.Manager.Knox()` (avoiding a typed-nil interface).
 - Only `src/server` imports everything. No package imports `cmd` or `api`.
@@ -142,6 +143,7 @@ First-run setup
 
 Settings save
 - `api.putKnoxSettings` -> `settings.Manager.SaveKnox`: normalise, seal a new secret with `secretbox`, `db.AppSettings.SaveKnox` (row + audit in one transaction), then swap the live `knox.Client`. AD is the same via `SaveAD` and `auth.Service.SetDirectory`. Saves are serialised by `saveMu`.
+- `api.putProxySettings` -> `settings.Manager.SaveProxy`: normalise (`netproxy.Validate`), seal a new password (empty keeps it, `clearPassword` removes it), `db.AppSettings.SaveProxy` (row + `settings.proxy` audit in one transaction), then `applyProxy` calls `Transport.Set`, which swaps the underlying `http.Transport` and closes idle connections, so Knox and update checks use the new proxy at once. `Load` applies the stored proxy before building the Knox client; an unreadable password is logged and leaves the environment fallback.
 - `knoxConfigured` middleware on `/api/knox` answers 503 `knox_not_configured` while `Deps.Knox()` is nil.
 
 ## Windows desktop start (`cmd/knoxmgr-desktop`)

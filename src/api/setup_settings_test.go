@@ -258,6 +258,8 @@ func TestSettingsAdminOnly(t *testing.T) {
 		{"GET", "/api/admin/settings/ad", ""},
 		{"PUT", "/api/admin/settings/ad", `{}`},
 		{"POST", "/api/admin/settings/ad/test", `{}`},
+		{"GET", "/api/admin/settings/proxy", ""},
+		{"PUT", "/api/admin/settings/proxy", `{}`},
 		{"GET", "/api/admin/settings/general", ""},
 		{"PUT", "/api/admin/settings/general", `{}`},
 	}
@@ -471,5 +473,39 @@ func TestGeneralPutAbsentKeepsStored(t *testing.T) {
 		if resp := do(t, e.app, "PUT", "/api/admin/settings/general", body, a); resp.StatusCode != 400 {
 			t.Errorf("%s: status %d", body, resp.StatusCode)
 		}
+	}
+}
+
+func TestProxyEndpoints(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("http_proxy", "")
+	e := newEnv(t)
+	a := e.token(t, "root")
+	const pw = "px-secret-value-xyz"
+	put := func(body string) (int, string) {
+		resp := do(t, e.app, "PUT", "/api/admin/settings/proxy", body, a)
+		return resp.StatusCode, bodyOf(t, resp)
+	}
+	get := func() string { return bodyOf(t, do(t, e.app, "GET", "/api/admin/settings/proxy", "", a)) }
+
+	for _, body := range []string{`{`, `{"url":"ftp://p.example:21"}`, `{"url":"http://u:p@p.example:3128"}`, `{"password":"x"}`} {
+		if code, _ := put(body); code != 400 {
+			t.Errorf("%s: status %d, want 400", body, code)
+		}
+	}
+	code, out := put(`{"url":"http://proxy.example:3128","username":"bob","password":"` + pw + `","bypass":"localhost"}`)
+	if code != 200 || strings.Contains(out, pw) || !strings.Contains(out, `"passwordSet":true`) || !strings.Contains(out, `"source":"setting"`) {
+		t.Fatalf("PUT = %d %s", code, out)
+	}
+	if g := get(); strings.Contains(g, pw) || !strings.Contains(g, `"passwordSet":true`) {
+		t.Fatalf("GET = %s", g)
+	}
+	if code, out = put(`{"url":"http://proxy.example:3128","username":"bob","clearPassword":true}`); code != 200 || !strings.Contains(out, `"passwordSet":false`) {
+		t.Fatalf("clear = %d %s", code, out)
+	}
+	if code, out = put(`{}`); code != 200 || !strings.Contains(out, `"source":"none"`) {
+		t.Fatalf("empty = %d %s", code, out)
 	}
 }

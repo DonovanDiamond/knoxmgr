@@ -52,7 +52,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 10 {
+	if err := d.Get(&n, `SELECT COUNT(*) FROM schema_migrations`); err != nil || n != 11 {
 		t.Fatalf("schema_migrations rows = %d, %v", n, err)
 	}
 }

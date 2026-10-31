@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,12 +18,14 @@ import (
 	"github.com/DonovanDiamond/knoxmgr/src/config"
 	"github.com/DonovanDiamond/knoxmgr/src/db"
 	"github.com/DonovanDiamond/knoxmgr/src/knox"
+	"github.com/DonovanDiamond/knoxmgr/src/netproxy"
 	"github.com/DonovanDiamond/knoxmgr/src/secretbox"
 )
 
 const (
 	tokenPath   = "/emm/oauth/token"
 	testTimeout = 20 * time.Second
+	knoxTimeout = 30 * time.Second
 )
 
 // Manager holds the live Knox client, applies saved settings to it and to the auth service, and
@@ -33,6 +36,8 @@ type Manager struct {
 	auth *auth.Service
 	log  zerolog.Logger
 
+	transport *netproxy.Transport // shared by Knox and update checks; Set on proxy save
+
 	saveMu  sync.Mutex // serialises save-then-rebuild so the live state matches the last save
 	knox    atomic.Pointer[knox.Client]
 	general atomic.Pointer[db.GeneralSettings]
@@ -41,7 +46,14 @@ type Manager struct {
 }
 
 func New(repo *db.AppSettings, box *secretbox.Box, authSvc *auth.Service, log zerolog.Logger) *Manager {
-	return &Manager{repo: repo, box: box, auth: authSvc, log: log}
+	return &Manager{repo: repo, box: box, auth: authSvc, log: log, transport: netproxy.NewTransport(netproxy.Config{})}
+}
+
+// Transport is the outbound round tripper that follows the saved proxy setting.
+func (m *Manager) Transport() *netproxy.Transport { return m.transport }
+
+func (m *Manager) knoxHTTP() *http.Client {
+	return &http.Client{Timeout: knoxTimeout, Transport: m.transport}
 }
 
 // SetHooks registers callbacks run after a successful SaveKnox and SaveGeneral. Call before serving.
@@ -56,6 +68,14 @@ func (m *Manager) Load(ctx context.Context) error {
 		return err
 	}
 	m.general.Store(&g)
+	// The proxy goes first so the first Knox call already uses it.
+	px, err := m.repo.GetProxy(ctx)
+	if err != nil {
+		return err
+	}
+	if err := m.applyProxy(px); err != nil {
+		m.log.Error().Err(err).Msg("stored proxy settings unusable; falling back to the environment proxy until they are saved again")
+	}
 	k, err := m.repo.GetKnox(ctx)
 	if err != nil {
 		return err
@@ -115,7 +135,7 @@ func (m *Manager) applyKnox(k db.KnoxSettings) error {
 	if k.AllowInsecureHTTP && strings.HasPrefix(k.BaseURL, "http:") {
 		m.log.Warn().Msg("Knox connection uses plain HTTP: credentials may travel unencrypted; use only with the mock")
 	}
-	m.knox.Store(knox.New(m.knoxConfig(k, secret), nil))
+	m.knox.Store(knox.New(m.knoxConfig(k, secret), m.knoxHTTP()))
 	return nil
 }
 
@@ -144,6 +164,72 @@ func (m *Manager) applyAD(a db.ADSettings) error {
 	}
 	m.auth.SetDirectory(dir, cfg.Groups)
 	return nil
+}
+
+// applyProxy swaps the live transport to p. On an unreadable password it leaves the environment fallback.
+func (m *Manager) applyProxy(p db.ProxySettings) error {
+	c := netproxy.Config{URL: p.URL, Username: p.Username, Bypass: p.Bypass}
+	if p.PasswordCipher != "" {
+		pw, err := m.box.Open(p.PasswordCipher)
+		if err != nil {
+			m.transport.Set(netproxy.Config{})
+			return fmt.Errorf("proxy password: %w", err)
+		}
+		c.Password = pw
+	}
+	m.transport.Set(c)
+	return nil
+}
+
+// ProxyView is what the API returns for the proxy; the password is only ever "set or not".
+type ProxyView struct {
+	URL          string `json:"url"`
+	Username     string `json:"username"`
+	PasswordSet  bool   `json:"passwordSet"`
+	Bypass       string `json:"bypass"`
+	Source       string `json:"source"`
+	EffectiveURL string `json:"effectiveUrl"`
+}
+
+func proxyView(p db.ProxySettings) ProxyView {
+	src, eff := netproxy.Source(netproxy.Config{URL: p.URL})
+	return ProxyView{URL: p.URL, Username: p.Username, PasswordSet: p.PasswordCipher != "", Bypass: p.Bypass, Source: src, EffectiveURL: eff}
+}
+
+func (m *Manager) GetProxy(ctx context.Context) (ProxyView, error) {
+	p, err := m.repo.GetProxy(ctx)
+	return proxyView(p), err
+}
+
+// SaveProxy validates, stores (with its audit entry) and applies the proxy without a restart.
+func (m *Manager) SaveProxy(ctx context.Context, in ProxyInput, actor *auth.Principal) (ProxyView, error) {
+	if err := in.normalise(); err != nil {
+		return ProxyView{}, err
+	}
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	next, err := m.repo.GetProxy(ctx)
+	if err != nil {
+		return ProxyView{}, err
+	}
+	next.URL, next.Username, next.Bypass = in.URL, in.Username, in.Bypass
+	changed := false
+	switch {
+	case in.ClearPassword:
+		next.PasswordCipher, changed = "", next.PasswordCipher != ""
+	case in.Password != "":
+		changed = true
+		if next.PasswordCipher, err = m.box.Seal(in.Password); err != nil {
+			return ProxyView{}, err
+		}
+	}
+	if err := m.repo.SaveProxy(ctx, next, changed, &actor.UserID, actor.Username); err != nil {
+		return ProxyView{}, err
+	}
+	if err := m.applyProxy(next); err != nil {
+		return ProxyView{}, err
+	}
+	return proxyView(next), nil
 }
 
 // KnoxView is what the API returns for Knox settings; the secret is only ever "set or not".
@@ -234,7 +320,7 @@ func (m *Manager) TestKnox(ctx context.Context, in KnoxInput) (KnoxTestResult, e
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	// A fresh client with its own token cache, so the check is of these credentials.
-	err = knox.New(m.knoxConfig(next, secret), nil).Probe(ctx)
+	err = knox.New(m.knoxConfig(next, secret), m.knoxHTTP()).Probe(ctx)
 	var pe *knox.ProbeError
 	switch {
 	case errors.As(err, &pe):

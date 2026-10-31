@@ -202,7 +202,7 @@ func newEnvWith(t *testing.T, tweak func(*Deps)) *env {
 		w.Write([]byte(`{"tag_name":"v0.5.0"}`))
 	}))
 	t.Cleanup(gh.Close)
-	deps := Deps{Log: zerolog.Nop(), Version: "v0.4.0", Update: update.New("v0.4.0", gh.URL, mgr.CheckUpdates, zerolog.Nop()), Auth: svc, Users: users, Audit: audit, Settings: mgr, Mirror: mirror, Apps: apps, Inventory: inv, Sync: syncer,
+	deps := Deps{Log: zerolog.Nop(), Version: "v0.4.0", Update: update.New("v0.4.0", gh.URL, mgr.CheckUpdates, mgr.Transport(), zerolog.Nop()), Auth: svc, Users: users, Audit: audit, Settings: mgr, Mirror: mirror, Apps: apps, Inventory: inv, Sync: syncer,
 		Knox: func() Knox {
 			if c := mgr.Knox(); c != nil {
 				return c

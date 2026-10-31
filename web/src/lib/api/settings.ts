@@ -7,6 +7,8 @@ import type {
 	KnoxSettings,
 	KnoxSettingsInput,
 	KnoxTestResult,
+	ProxySettings,
+	ProxySettingsInput,
 	UpdateStatus
 } from './types';
 
@@ -42,3 +44,6 @@ export const syncNow = () => api<{ id: number; alreadyRunning: boolean }>('/api/
 
 export const getUpdateStatus = () => api<UpdateStatus>('/api/admin/update');
 export const checkForUpdates = () => api<UpdateStatus>('/api/admin/update/check', { method: 'POST' });
+
+export const getProxySettings = () => api<ProxySettings>(`${base}/proxy`);
+export const saveProxySettings = (s: ProxySettingsInput) => api<ProxySettings>(`${base}/proxy`, json('PUT', s));

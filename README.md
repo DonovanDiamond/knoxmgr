@@ -86,6 +86,17 @@ The version is shown in the UI (set at build time from the git tag). Admins see 
 available" notice when a newer release exists: the server checks GitHub releases every 24 hours.
 For air-gapped installs turn it off under Admin > Settings > General > **Check for updates**.
 
+## Outbound proxy
+
+If the server must reach the internet through an HTTP(S) proxy, an admin sets it under
+Admin > Settings > Network. No restart is needed.
+
+- **Proxy URL**: `http://` or `https://` only, host and optional port, no path and no credentials in the URL.
+- **Username / password**: optional. The password is encrypted at rest, never shown again (only "set"), and can be replaced or cleared.
+- **Bypass list**: comma-separated hosts that skip the proxy, with `NO_PROXY` semantics: `example.com` matches that host and its subdomains, `.example.com` matches subdomains only, plus IPs, CIDRs and `host:port`. `localhost` and loopback addresses are always bypassed.
+- **No URL set**: the standard `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` environment variables apply; the screen shows which one is in effect.
+- Applies to Knox traffic (sync, actions and **Test connection**) and update checks. It does not apply to Active Directory (LDAP) sign-in.
+
 ## Configuration
 
 | Flag | Environment | Meaning |

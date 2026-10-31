@@ -489,3 +489,76 @@ func TestGeneralAppInventory(t *testing.T) {
 		}
 	}
 }
+
+func TestProxyValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      ProxyInput
+		wantErr bool
+	}{
+		{"empty ok", ProxyInput{}, false},
+		{"url ok", ProxyInput{URL: " http://p.example:3128 ", Username: "u", Password: "p"}, false},
+		{"bad scheme", ProxyInput{URL: "ftp://p.example"}, true},
+		{"userinfo in url", ProxyInput{URL: "http://u:p@p.example:3128"}, true},
+		{"bad bypass", ProxyInput{URL: "http://p.example:3128", Bypass: "bad host!"}, true},
+		{"password without username", ProxyInput{URL: "http://p.example:3128", Password: "p"}, true},
+		{"clear without username", ProxyInput{URL: "http://p.example:3128", ClearPassword: true}, false},
+		{"password and clear", ProxyInput{URL: "http://p.example:3128", Username: "u", Password: "p", ClearPassword: true}, true},
+		{"control char in username", ProxyInput{URL: "http://p.example:3128", Username: "u\x01"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.in.normalise()
+			var ie *InvalidError
+			if tc.wantErr != errors.As(err, &ie) || (!tc.wantErr && err != nil) {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestSaveProxy(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("HTTP_PROXY", "http://env.example:8080")
+	t.Setenv("http_proxy", "")
+	ctx := context.Background()
+	m, repo, _, _ := newManager(t)
+	const pw = "proxy-pass-123"
+
+	v, err := m.SaveProxy(ctx, ProxyInput{URL: "http://p.example:3128", Username: "u", Password: pw}, actor)
+	if err != nil || v.Source != "setting" || !v.PasswordSet || v.EffectiveURL == "" {
+		t.Fatalf("save = %+v, %v", v, err)
+	}
+	if b, _ := json.Marshal(v); strings.Contains(string(b), pw) {
+		t.Fatalf("view leaks password: %s", b)
+	}
+	stored, _ := repo.GetProxy(ctx)
+	if stored.PasswordCipher == "" || strings.Contains(stored.PasswordCipher, pw) {
+		t.Fatalf("stored cipher = %q", stored.PasswordCipher)
+	}
+
+	// Empty password keeps the stored one.
+	if v, err = m.SaveProxy(ctx, ProxyInput{URL: "http://p.example:3128", Username: "u"}, actor); err != nil || !v.PasswordSet {
+		t.Fatalf("keep = %+v, %v", v, err)
+	}
+	if v, err = m.SaveProxy(ctx, ProxyInput{URL: "http://p.example:3128", Username: "u", ClearPassword: true}, actor); err != nil || v.PasswordSet {
+		t.Fatalf("clear = %+v, %v", v, err)
+	}
+	if stored, _ = repo.GetProxy(ctx); stored.PasswordCipher != "" {
+		t.Fatalf("cipher after clear = %q", stored.PasswordCipher)
+	}
+
+	// Without a setting the environment proxy is reported, and with none, "none".
+	if v, err = m.SaveProxy(ctx, ProxyInput{}, actor); err != nil || v.Source != "env" {
+		t.Fatalf("env = %+v, %v", v, err)
+	}
+	t.Setenv("HTTP_PROXY", "")
+	if v, _ = m.GetProxy(ctx); v.Source != "none" || v.EffectiveURL != "" {
+		t.Fatalf("none = %+v", v)
+	}
+
+	if _, err = m.SaveProxy(ctx, ProxyInput{URL: "ftp://x"}, actor); err == nil {
+		t.Fatal("invalid url accepted")
+	}
+}

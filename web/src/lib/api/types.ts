@@ -197,6 +197,24 @@ export interface GeneralSettings {
 	appReportDaily: boolean;
 }
 
+export interface ProxySettings {
+	url: string;
+	username: string;
+	passwordSet: boolean;
+	bypass: string;
+	source: 'setting' | 'env' | 'none';
+	effectiveUrl: string;
+}
+
+export interface ProxySettingsInput {
+	url: string;
+	username: string;
+	/** Empty keeps the stored password. */
+	password: string;
+	clearPassword: boolean;
+	bypass: string;
+}
+
 export interface UpdateStatus {
 	enabled: boolean;
 	current: string;

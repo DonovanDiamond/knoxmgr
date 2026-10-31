@@ -97,7 +97,7 @@ func Run(ctx context.Context, log zerolog.Logger, o Options) error {
 	inventory := sync.NewInventory(mirror, apps, audit, mgr.Knox, mgr.AppInventoryHours, mgr.AppReportDaily, log)
 	syncer.OnSynced(func(ctx context.Context, trigger string) { go inventory.AfterSync(ctx, trigger) })
 	// KNOXMGR_TEST_GITHUB_API points the checker at a fake GitHub for screenshots; unset in production.
-	checker := update.New(o.Version, os.Getenv("KNOXMGR_TEST_GITHUB_API"), mgr.CheckUpdates, log)
+	checker := update.New(o.Version, os.Getenv("KNOXMGR_TEST_GITHUB_API"), mgr.CheckUpdates, mgr.Transport(), log)
 	mgr.SetHooks(syncer.KnoxSaved, func() { syncer.Reschedule(); checker.Wake() })
 	go syncer.Start(ctx)
 	go inventory.Start(ctx)

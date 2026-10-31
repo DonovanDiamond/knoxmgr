@@ -434,3 +434,11 @@ Decided by the user 2026-10-13; these refine the M13 entry above.
 - **"Enrolled" is defined once** in `knox.IsEnrolled` (`src/knox/enrolled.go`), used by the API and the sync.
 - **Unknown `/api/*` paths return a JSON 404** (tested in `src/api/web_test.go`), not the SPA page.
 - **Apps list layout:** one header row; no Category column when grouped by category.
+
+## Outbound proxy (2026-10-30)
+
+- **Admin setting, DB-stored** like Knox and AD (Admin > Settings > Network), applied live. Table `proxy_settings` (migration 0011); password encrypted, write-only, clearable.
+- **HTTP(S) proxies only** (`http://` or `https://` URL). SOCKS and PAC are not supported.
+- **Environment fallback:** with no URL set, `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` apply, so existing deployments that already use them keep working.
+- **Covers Knox and update checks; LDAP is excluded.** The AD library dials directly and has no proxy hook, so AD sign-in must reach the directory on the local network.
+- **Bypass list** follows `NO_PROXY` semantics (`golang.org/x/net/http/httpproxy`); `localhost` is always bypassed.

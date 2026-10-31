@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/DonovanDiamond/knoxmgr/src/config"
+	"github.com/DonovanDiamond/knoxmgr/src/netproxy"
 )
 
 const (
@@ -115,6 +116,35 @@ func (in *KnoxInput) normalise() error {
 		return invalid("tenantId must be 1 to 100 letters, digits or _.:-")
 	}
 	return checkText("clientSecret", in.ClientSecret, maxSecret)
+}
+
+// ProxyInput is the PUT /proxy body. Password is empty to keep the stored one; ClearPassword removes it.
+type ProxyInput struct {
+	URL           string `json:"url"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	ClearPassword bool   `json:"clearPassword"`
+	Bypass        string `json:"bypass"`
+}
+
+func (in *ProxyInput) normalise() error {
+	in.URL, in.Username, in.Bypass = strings.TrimSpace(in.URL), strings.TrimSpace(in.Username), strings.TrimSpace(in.Bypass)
+	if err := netproxy.Validate(netproxy.Config{URL: in.URL, Bypass: in.Bypass}); err != nil {
+		return &InvalidError{err.Error()}
+	}
+	if err := checkText("username", in.Username, maxText); err != nil {
+		return err
+	}
+	if err := checkText("password", in.Password, maxSecret); err != nil {
+		return err
+	}
+	if in.Password != "" && in.ClearPassword {
+		return invalid("password and clearPassword cannot both be set")
+	}
+	if in.Password != "" && in.Username == "" {
+		return invalid("a password needs a username")
+	}
+	return nil
 }
 
 // ADInput is the PUT /ad body. BindPassword is empty to keep the stored password.
